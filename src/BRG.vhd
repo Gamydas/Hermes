@@ -32,7 +32,7 @@ USE IEEE.NUMERIC_STD.ALL;
     GENERIC(freq: integer := 50_000_000;
             baud: integer := 115200;
             OSR : integer := 16);
-    PORT(clk, enable, rst : IN  STD_LOGIC;
+    PORT(clk, sync, rst : IN  STD_LOGIC;
          tx_enable : OUT STD_LOGIC; 
          rx_enable : OUT STD_LOGIC 
        );
@@ -70,7 +70,7 @@ BEGIN  -- start of architecture --
     ELSIF clk = '1' and clk'EVENT THEN
       rx_enable <= '0'; -- default value
       tx_enable <= '0'; -- default value
-      IF (enable = '1') THEN
+      IF (sync = '0') THEN
         IF (cnt = tick - 1) THEN
           -- counter reset
           cnt <= 0; 
@@ -91,6 +91,9 @@ BEGIN  -- start of architecture --
         ELSE
           cnt <= cnt + 1;
         END IF;
+      ELSE 
+        cnt <= 0;
+        tick_cnt <= 0; 
       END IF;
     END IF;
   END PROCESS Baud_gen;
