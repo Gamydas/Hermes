@@ -28,7 +28,7 @@ To make certain things easier to explain and keep terminology uniform I have pre
 | Simulation | Altera Questa |
 | Testframework | VUnit |
 
-If you wish to run tests, do not do it via quartus, as the testbenches have not been included in the quartus project to avoid compatibility issues. Refer to the [Testing and Verification](https://github.com/Gamydas/Hermes-UART-/edit/main/README.md#testing-and-verification) Section
+If you wish to run tests, do not do it via quartus, as the testbenches have not been included in the quartus project to avoid compatibility issues. Refer to the [Testing and Verification](https://github.com/Gamydas/Hermes-UART-/blob/main/README.md#testing-and-verification) Section
 
 ## How to Use
 
