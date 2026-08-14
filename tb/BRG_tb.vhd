@@ -67,17 +67,16 @@ ARCHITECTURE tb OF BRG_tb IS
   --------------------------------------------------------------------------
   -- CONSTANTS DECLARATION --
   -- simulation constants
-  CONSTANT C_CLK_PERIOD : time := 20 ns;
-
-  -- FSM DECLARATION --
+  CONSTANT C_CLK_PERIOD : time := 1 sec / freq;
 
   -- TYPES DECLARATION --
 
   -- INTERNAL SIGNALS DECLARATION --
   -- DUT interface
-  SIGNAL clk    : STD_LOGIC := '0';
-  SIGNAL rst    : STD_LOGIC := '1';
-  SIGNAL enable : STD_LOGIC := '1';
+  SIGNAL clk  : STD_LOGIC := '0';
+  SIGNAL rst  : STD_LOGIC := '1';
+  -- sync is low active
+  SIGNAL sync : STD_LOGIC := '0';
   SIGNAL tx_enable, rx_enable : STD_LOGIC;
 
   -- simulation signals
@@ -93,9 +92,9 @@ BEGIN  -- start of architecture --
   BRG_inst : ENTITY SRC_LIB.BRG(rtl)
     GENERIC MAP(freq => freq, baud => baud, OSR => OSR)
     PORT MAP(
-      clk   => clk,
-      rst => rst,
-      enable    => enable,
+      clk  => clk,
+      rst  => rst,
+      sync => sync,
       tx_enable => tx_enable,
       rx_enable => rx_enable
     );
@@ -106,7 +105,7 @@ BEGIN  -- start of architecture --
   
 
   --------------------------------------------------------------------------
-  -- CLOCK AND RESET.
+  -- CLOCK
   --------------------------------------------------------------------------
   clk   <= NOT clk after C_CLK_PERIOD / 2;
 
@@ -120,6 +119,68 @@ BEGIN  -- start of architecture --
     -- VARIABLE DECLARATION.
 
     -- FUNCTIONS/PROCEDURES DECLARATION.
+    -- brief: Procedure to check tx_enable and rx_enable signal for every cycle
+    -- over a full bit_time
+    -- Tx: tx_enable signal
+    -- Rx: rx_enable signal
+    PROCEDURE check_TxRx(SIGNAL Tx: IN std_logic;
+                         SIGNAL Rx: IN std_logic;
+                         SIGNAL clk : IN std_logic;
+                         constant line_num : natural :=0;
+                         constant file_name : string  := "") is
+    BEGIN
+      -- 0 to bit_mid - 1 ticks
+      for i in 1 to ((tick*mid_bit_point)-tick)-1 loop
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        check(Tx = '0', "Expected Tx to be '0'", line_num => line_num, file_name => file_name); 
+        check(Rx = '0', "Expected Rx to be '0'", line_num => line_num, file_name => file_name); 
+      end loop;
+      -- next rising edge puts us at exactle bit_mid-1 ticks, so Rx has to pulse high for 1 cycle
+      wait until rising_edge(clk);
+      wait for 1 ps;
+      check(Tx = '0', "Expected Tx to be '0'", line_num => line_num, file_name => file_name); 
+      check(Rx = '1', "Expected Rx to be '1'", line_num => line_num, file_name => file_name);
+      -- bridges the 1 tick to bit_mid_point
+      for i in 1 to tick-1 loop
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        check(Tx = '0', "Expected Tx to be '0'", line_num => line_num, file_name => file_name); 
+        check(Rx = '0', "Expected Rx to be '0'", line_num => line_num, file_name => file_name); 
+      end loop;
+      -- next rising edge puts us exactly at bit_mid_point, Rx has to go high
+      wait until rising_edge(clk);
+      WAIT FOR 1 ps;
+      check(Tx = '0', "Expected Tx to be '0'", line_num => line_num, file_name => file_name); 
+      check(Rx = '1', "Expected Rx to be '1'", line_num => line_num, file_name => file_name);
+      -- bridges the 1 tick to bit_mid_point + 1
+      for i in 1 to tick-1 loop
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        check(Tx = '0', "Expected Tx to be '0'", line_num => line_num, file_name => file_name); 
+        check(Rx = '0', "Expected Rx to be '0'", line_num => line_num, file_name => file_name); 
+      end loop;
+      -- next rising edge puts us exactly at bit_mid_point + 1, Rx has to go high
+      wait until rising_edge(clk);
+      WAIT FOR 1 ps;
+      check(Tx = '0', "Expected Tx to be '0'", line_num => line_num, file_name => file_name); 
+      check(Rx = '1', "Expected Rx to be '1'", line_num => line_num, file_name => file_name);
+      -- checks every rising edge from bit_mid_point + 1 to the end of the bittime
+      for i in 1 to (tick*mid_bit_point) - tick - 1 loop
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        check(Tx = '0', "Expected Tx to be '0'", line_num => line_num, file_name => file_name); 
+        check(Rx = '0', "Expected Rx to be '0'", line_num => line_num, file_name => file_name); 
+      end loop;
+      -- next rising edge completes this bit time
+      wait until rising_edge(clk);
+      wait for 1 ps;
+      check(Tx = '1', "Expected Tx to be '1'", line_num => line_num, file_name => file_name); 
+      check(Rx = '0', "Expected Rx to be '0'", line_num => line_num, file_name => file_name); 
+    END PROCEDURE check_TxRx;
+
+
+
 
   BEGIN
     -- setup VUnit
@@ -134,56 +195,158 @@ BEGIN  -- start of architecture --
 
       ----------------------------------------------------------------------
       -- TEST CASE DESCRIPTION:
-      -- checks if tx_enable behaves as intended 
+      -- test to see wether tx and rx behave like they are expected to, i.e. 
+      -- there are always 3 rx pulses in the around the mid_bit_point and one 
+      -- tx pulse at the end of a bittime
       -- Expected Result: tx_enable = '0' at every time except after OSR * tick cycles
-      --
+      --                  rx_enable = '1' at bit_mid_point - 1, bit_mid_point and bmp + 1
       ----------------------------------------------------------------------
-      IF run("tx_enable_test") THEN
+      IF run("tx_rx_test") THEN
         info("--------------------------------------------------------------------------------");
-        info("TEST CASE: tx_enable_test");
+        info("TEST CASE: tx_rx_test");
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
-        check(tx_enable = '0', "Expection transmition enable to be low");
-        wait_N_cycles((OSR * tick) - tick,clk);
-        WAIT FOR 1 ps;
-        check(tx_enable = '0', "Expection transmition enable to be low");
-        wait_N_cycles(tick,clk);
-        WAIT FOR 1 ps;
-        check(tx_enable = '1', "Expected transmition enable to be active");
-        wait_N_cycles(1,clk);
-        WAIT FOR 1 ps;
-        check(tx_enable = '0', "Expection transmition enable to be low");
+        check(tx_enable = '0', "Expected Tx to be '0'");
+        check(rx_enable = '0', "Expected Rx to be '0'");
+        check_TxRx(tx_enable, rx_enable, clk);
         info("===== TEST CASE FINISHED =====");
-      
       ----------------------------------------------------------------------
       -- TEST CASE DESCRIPTION:
-      -- checks if rx_enable behaves correctly
-      -- Expected Result: rx_enable = '0' at every time except
-      -- at mid_bit_point-1, mid_bit_point and mid_bit_point + 1 
+      -- checks that tx and rx behave correctly over more than one period and 
+      -- dont drift apart
+      -- Expected Result: tx_enable = '0' at every time except after OSR * tick cycles
+      --                  rx_enable = '1' at bit_mid_point - 1, bit_mid_point and bmp + 1
+      -- For 10 full bittimes
       ----------------------------------------------------------------------
-      ELSIF run("rx_enable_test") THEN
+      ELSIF run("tx_rx_over_10_bittimes") THEN
         info("--------------------------------------------------------------------------------");
-        info("TEST CASE: rx_enable_test");
+        info("TEST CASE: tx_rx_over_10_bittimes");
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
-        check(rx_enable = '0', "Expected receive enable to be low");
-        wait_N_cycles(mid_bit_point*tick - 2*tick,clk);
-        WAIT FOR 1 ps;
-        check(rx_enable = '0', "Expected receive enable to be low");
-        wait_N_cycles(tick,clk);
-        WAIT FOR 1 ps;
-        check(rx_enable = '1', "Expected receive enable to be high");
-        wait_N_cycles(tick,clk);
-        WAIT FOR 1 ps;
-        check(rx_enable = '1', "Expected receive enable to be high");
-        wait_N_cycles(tick,clk);
-        WAIT FOR 1 ps;
-        check(rx_enable = '1', "Expected receive enable to be high");
-        wait_N_cycles(tick,clk);
-        WAIT FOR 1 ps;
-        check(rx_enable = '0', "Expected receive enable to be low");
-
+        check(tx_enable = '0', "Expected Tx to be '0'");
+        check(rx_enable = '0', "Expected Rx to be '0'");
+        for i in 1 to 10 loop
+          check_TxRx(tx_enable, rx_enable, clk);
+        end loop;
         info("===== TEST CASE FINISHED =====");
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- checks that resynchronisation works 
+      -- Expected Result: sync = 1 stops counter and after sync goes low the
+      --                  counter start from the beginning
+      ----------------------------------------------------------------------
+      ELSIF run("sync_test") THEN 
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: sync_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        -- 0 to bit_mid - 1 ticks
+        for i in 1 to ((tick*mid_bit_point)-tick)-1 loop
+          wait until rising_edge(clk);
+          wait for 1 ps;
+          check(tx_enable = '0', "Expected Tx to be '0'"); 
+          check(rx_enable = '0', "Expected Rx to be '0'"); 
+        end loop;
+        -- next rising edge puts us at exactle bit_mid-1 ticks, so Rx has to pulse high for 1 cycle
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        check(tx_enable = '0', "Expected Tx to be '0'"); 
+        check(rx_enable = '1', "Expected Rx to be '1'");
+        -- bridges the 1 tick to bit_mid_point
+        for i in 1 to tick-1 loop
+          wait until rising_edge(clk);
+          wait for 1 ps;
+          check(tx_enable = '0', "Expected Tx to be '0'"); 
+          check(rx_enable = '0', "Expected Rx to be '0'"); 
+        end loop;
+        -- next rising edge puts us exactly at bit_mid_point, Rx has to go high
+        wait until rising_edge(clk);
+        WAIT FOR 1 ps;
+        check(tx_enable = '0', "Expected Tx to be '0'"); 
+        check(rx_enable = '1', "Expected Rx to be '1'");  
+        -- stop the BRG
+        sync <= '1';
+        wait for 1 ps;
+          wait until rising_edge(clk);
+        wait for 1 ps;
+        check(tx_enable = '0', "Expected Tx to be '0'"); 
+        check(rx_enable = '0', "Expected Rx to be '0'");   
+        sync <= '0';
+        wait for 1 ps;  
+        check_TxRx(tx_enable,rx_enable, clk);
+        info("===== TEST CASE FINISHED =====");
+
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- sync is pulsed two cycles before the end of a bittime, where tick_cnt
+      -- is on its last value and about to wrap
+      -- Expected Result: counter restarts from 0, no leftover carry
+      ----------------------------------------------------------------------
+      ELSIF run("sync_before_tx_pulse") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: sync_before_tx_pulse");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        wait_N_cycles((OSR*tick)-2, clk);
+        wait for 1 ps;
+        sync <= '1';
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        sync <= '0';
+        check_TxRx(tx_enable, rx_enable, clk);
+        info("===== TEST CASE FINISHED =====");
+
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- checks that the async reset works 
+      -- Expected Result: rst = 1 resets counter and after rst goes low the
+      --                  counter start from the beginning
+      ----------------------------------------------------------------------
+      ELSIF run("reset_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: reset_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        -- 0 to bit_mid - 1 ticks
+        for i in 1 to ((tick*mid_bit_point)-tick)-1 loop
+          wait until rising_edge(clk);
+          wait for 1 ps;
+          check(tx_enable = '0', "Expected Tx to be '0'"); 
+          check(rx_enable = '0', "Expected Rx to be '0'"); 
+        end loop;
+        -- next rising edge puts us at exactle bit_mid-1 ticks, so Rx has to pulse high for 1 cycle
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        check(tx_enable = '0', "Expected Tx to be '0'"); 
+        check(rx_enable = '1', "Expected Rx to be '1'");
+        -- bridges the 1 tick to bit_mid_point
+        for i in 1 to tick-1 loop
+          wait until rising_edge(clk);
+          wait for 1 ps;
+          check(tx_enable = '0', "Expected Tx to be '0'"); 
+          check(rx_enable = '0', "Expected Rx to be '0'"); 
+        end loop;
+        -- next rising edge puts us exactly at bit_mid_point, Rx has to go high
+        wait until rising_edge(clk);
+        WAIT FOR 1 ps;
+        check(tx_enable = '0', "Expected Tx to be '0'"); 
+        check(rx_enable = '1', "Expected Rx to be '1'");  
+        -- stop the BRG
+        rst <= '1';
+        wait for 1 ps;
+        for i in 1 to 1000 loop
+          wait until rising_edge(clk);
+          wait for 1 ps;
+          check(tx_enable = '0', "Expected Tx to be '0'"); 
+          check(rx_enable = '0', "Expected Rx to be '0'");   
+        end loop;
+        rst <= '0';
+        wait for 1 ps;  
+        check_TxRx(tx_enable,rx_enable, clk); 
+        info("===== TEST CASE FINISHED =====");
+
       END IF; -- for test_suite
     END LOOP test_cases_loop;
 
