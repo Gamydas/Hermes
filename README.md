@@ -28,7 +28,7 @@ To make certain things easier to explain and keep terminology uniform I have pre
 | Simulation | Altera Questa |
 | Testframework | VUnit |
 
-If you wish to run tests, do not do it via quartus, as the testbenches have not been included in the quartus project to avoid compatibility issues. Refer to the `Testing and Verification` Section
+If you wish to run tests, do not do it via quartus, as the testbenches have not been included in the quartus project to avoid compatibility issues. Refer to the [Testing and Verification](https://github.com/Gamydas/Hermes-UART-/edit/main/README.md#testing-and-verification) Section
 
 ## How to Use
 
@@ -59,4 +59,4 @@ In the projects root directory there is a `run.py` file. With this we control th
 | Test case | What it proves |
 | --- | --- |
 | tx_enable_test | proves tx_enable sends a one clock cycle long pulse after a full bittime |
-| rx_enable_test | proves rx_enable sends a pulse after 1/2 bittime and after the next 2 ticks |
+| rx_enable_test | proves rx_enable sends a pulse after 1/2 -1 bittime and after the next 2 ticks, centered around the half of a bittime |
