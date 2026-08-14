@@ -39,6 +39,26 @@ If you wish to run tests, do not do it via quartus, as the testbenches have not 
 
 ## Architecture
 
+## Modules
+
+### Baud Rate Generator
+The Baud Rate Generator(`BRG.vhd`) might generates one cycle pulses for both tx and rx logic, i.e. telling both the transmitter when to send and the receiver when to read. For the Rx side, the BRG sends 3 pulses centered around
+the mid-bit-point to decide out of a best of 3 when reading differing signals during this window. I.e Rx reads '1' at mid-1, '0' at mid and '1' on mid + 1, Rx will assume that 1 is the correct value.
+
+| Generic | Purpose | 
+| --- | --- |
+| freq | used to configure the UART to the devices frequency,**default is 50 MHz** | 
+| baud | used to set a before agreed upon baud rate, **default is 115200** |
+| OSR  | used to set an oversampling rate, nessecary for the receiver to make a best of 3 decision, **default is 16, but minimum is 4** |
+
+| Ports | Direction | Purpose |
+| --- | --- | --- |
+| clk | IN | system clock port |
+| rst | IN | global async reset port |
+| sync | IN | sync reset, used to synchronise the receiver to the transmitters start-bit when receiving packages |
+| tx_enable | OUT | enable signal for the transmitter |
+| rx_enable | OUT | enable signal for the receiver | 
+
 ## Decisions 
 
 ## Testing and Verification
@@ -58,5 +78,10 @@ In the projects root directory there is a `run.py` file. With this we control th
 
 | Test case | What it proves |
 | --- | --- |
-| tx_enable_test | proves tx_enable sends a one clock cycle long pulse after a full bittime |
-| rx_enable_test | proves rx_enable sends a pulse after 1/2 -1 bittime and after the next 2 ticks, centered around the half of a bittime |
+| tx_rx_test | proves tx_enable sends a one clock cycle long pulse after a full bittime and x_enable sends a pulse after 1/2 -1 bittime and after the next 2 ticks, centered around the half of a bittime |
+| tx_rx_over_10_bittimes | proves that tx_enable and rx_enable behavior does not change/drift apart over time |
+| sync_test | tests if sync signal works as intended and resets the counter |
+| sync_before_tx_pulse | tests if sync works as intended at a different testing point, right before tx_enable should go high |
+| rst_test | essentially tests the same thing as sync_test, but asynchronously, also holds the rst high for 1000 cycles to check that the counter is stopped |
+
+
