@@ -32,7 +32,8 @@ BRG_tb = tb_lib.test_bench("BRG_tb")
 BRG_tb.add_config(name="one_cycle",   generics=dict(freq=1_843_200, baud=115200, OSR=16))
 BRG_tb.add_config(name="two_cycles",  generics=dict(freq=1_843_200, baud=115200, OSR=8))
 BRG_tb.add_config(name="four_cycles", generics=dict(freq=1_843_200, baud=115200, OSR=4))
-
+# real board values: 50e6/(16*115200) = 27.127, truncated to 27
+BRG_tb.add_config(name="real_board", generics=dict(freq=50_000_000, baud=115200, OSR=16))
 
 
 # So we see all internal signals
