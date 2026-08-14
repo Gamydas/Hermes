@@ -159,7 +159,7 @@ BEGIN  -- start of architecture --
       -- TEST CASE DESCRIPTION:
       -- checks if rx_enable behaves correctly
       -- Expected Result: rx_enable = '0' at every time except
-      -- at mid_bit_point, mid_bit_point +1 and mid_bit_point + 2 
+      -- at mid_bit_point-1, mid_bit_point and mid_bit_point + 1 
       ----------------------------------------------------------------------
       ELSIF run("rx_enable_test") THEN
         info("--------------------------------------------------------------------------------");
@@ -167,7 +167,7 @@ BEGIN  -- start of architecture --
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
         check(rx_enable = '0', "Expected receive enable to be low");
-        wait_N_cycles(mid_bit_point*tick - tick,clk);
+        wait_N_cycles(mid_bit_point*tick - 2*tick,clk);
         WAIT FOR 1 ps;
         check(rx_enable = '0', "Expected receive enable to be low");
         wait_N_cycles(tick,clk);

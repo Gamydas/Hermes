@@ -48,7 +48,7 @@ ARCHITECTURE rtl OF BRG IS
   --------------------------------------------------------------------------
   
   -- OSR amount of ticks equal one full bittime  
-  -- 1/OSR bittime 
+  -- the amount of clock cycles 
   constant tick : integer := freq/(OSR*baud);
   -- 1/2 bittime 
   constant mid_bit_point : integer := OSR/2;
@@ -74,8 +74,8 @@ BEGIN  -- start of architecture --
         IF (cnt = tick - 1) THEN
           -- counter reset
           cnt <= 0; 
-          -- midbit_point reached, send rx_enable pulses to signal receiver to sample now
-          IF (tick_cnt = mid_bit_point - 1 OR tick_cnt = mid_bit_point OR tick_cnt = mid_bit_point + 1) THEN
+          -- midbit_point -1 reached in this tick, send rx_enable pulses to signal receiver to sample now
+          IF (tick_cnt = mid_bit_point - 2 OR tick_cnt = mid_bit_point - 1 OR tick_cnt = mid_bit_point) THEN
             -- default value ensures pulsewidth is one
             rx_enable <= '1';
           END IF;
