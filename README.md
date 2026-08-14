@@ -47,7 +47,7 @@ If you wish to run tests, do not do it via quartus, as the testbenches have not 
 
 ### Baud Rate Generator
 The Baud Rate Generator(`BRG.vhd`) generates one cycle pulses for both tx and rx logic, i.e. telling both the transmitter when to send and the receiver when to read. For the Rx side, the BRG sends 3 pulses centered around
-the mid-bit-point to decide out of a best of 3 when reading differing signals during this window. I.e Rx reads '1' at mid-1, '0' at mid and '1' on mid + 1, Rx will assume that 1 is the correct value.
+the mid-bit-point to decide out of a best of 3 when reading differing signals during this window. I.e Rx reads '1' at mbp-1, '0' at mbp and '1' on mbp + 1, Rx will assume that 1 is the correct value.
 
 | Generic | Purpose | 
 | --- | --- |
