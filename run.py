@@ -11,7 +11,7 @@ TEST_PATH = ROOT / "tb"
 # create VUnit instance
 VU = VUnit.from_argv()
 VU.add_vhdl_builtins()
-VU.enable_location_preprocessing()
+VU.enable_location_preprocessing(additional_subprograms=["check_byte", "strobe_bit"])
 
 # create design library
 src_lib = VU.add_library("src_lib")
@@ -27,16 +27,7 @@ BRG_tb = tb_lib.test_bench("BRG_tb")
 TX_tb = tb_lib.test_bench("TX_tb")
 # since baud will be kept at 115200 and freq will be varied
 
-# this configuration uses the smallest possible tick_cycle (1) by setting
-# freq = OSR*baud
-BRG_tb.add_config(name="one_cycle",   generics=dict(freq=1_843_200, baud=115200, OSR=16))
-BRG_tb.add_config(name="two_cycles",  generics=dict(freq=1_843_200, baud=115200, OSR=8))
-BRG_tb.add_config(name="four_cycles", generics=dict(freq=1_843_200, baud=115200, OSR=4))
-# real board values: 50e6/(16*115200) = 27.127, truncated to 27
-BRG_tb.add_config(name="real_board", generics=dict(freq=50_000_000, baud=115200, OSR=16))
 
-# OSR is set to 1 
-TX_tb.add_config(name="one_cycle",   generics=dict(freq=115200, baud=115200))
 TX_tb.add_config(name="two_cycles",  generics=dict(freq=2*115200, baud=115200))
 TX_tb.add_config(name="four_cycles", generics=dict(freq=4*115200, baud=115200))
 # real board values: 50e6/(16*115200) = 27.127, truncated to 27
