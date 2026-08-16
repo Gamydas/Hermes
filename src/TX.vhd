@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------------
---  % NAME        : TX_wbrg.vhd %
+--  % NAME        : TX.vhd %
 --  % PROJECT     : UART %
 --  % VERSION     : 1.0 %
 --  % CREATED_BY  : Samy Gad %
@@ -28,19 +28,19 @@ USE IEEE.NUMERIC_STD.ALL;
 ----------------------------------------------------------------------------
 -- ENTITY DECLARATION.
 ----------------------------------------------------------------------------
-  ENTITY TX_wbrg IS
+  ENTITY TX IS
     GENERIC(freq: positive := 50_000_000;
             baud: positive := 115200);
     PORT(clk,rst, data_rdy : IN  STD_LOGIC;
          data_in : IN  STD_LOGIC_VECTOR(7 DOWNTO 0);
          data_out, status : OUT std_logic
     );
-  END ENTITY TX_wbrg;
+  END ENTITY TX;
 
 ----------------------------------------------------------------------------
 -- ARCHITECTURE DECLARATION.
 ----------------------------------------------------------------------------
-ARCHITECTURE rtl OF TX_wbrg IS
+ARCHITECTURE rtl OF TX IS
 
   --------------------------------------------------------------------------
   -- TYPES, RECORDS, INTERNAL SIGNALS, FSM, CONSTANTS DECLARATION.
