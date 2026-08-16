@@ -69,8 +69,10 @@ The transmitter is driven by an a `5 State FSM`, containing the states `idle`, `
 | `parity` | Transmission of parity. For now the Transmitter **always** sends an even parity bit | 
 | `stop` | Transmission of stop bit. As is usual in UART, the `data_out` is pulled high **for exactly 1 bittime**(this might become configurable) before either entering `start` or `idle` again |
 
-Apart from the FSM the transmitter is also fitted with 2 registers and of course the `BRG`/`baud enable generator`. First is `tx_hold_reg`, which is the buffer/holding register, loading data from the bus before and during transmissions. 
-The other is the `tx_shift_reg`, this is the serial out shift register of the transmitter, used to push the parallely loaded data bits onto the `data_out` line. 
+Apart from the FSM the transmitter is also fitted with 2 registers and of course the `BRG`/`baud enable generator`. \
+First is `tx_hold_reg`, which is the buffer/holding register, loading data from the bus before and during transmissions. \
+The other is the `tx_shift_reg`, this is the serial out shift register of the transmitter, used to push the parallely loaded data bits onto the `data_out` line.
+
 Lastly the `BRG`, at compilation the `bittime` constant is calculated, which follows from the formula **frequency/baud** which gives us the bittime in cycles instead of seconds. The counter counts up to bittime-1 before wrapping back to 0.
 The counter wraps at bittime-1 instead of bittime because this allows the FSM to drive transmission on the final rising edge of the bittime, removing the 1 cycle latency mentioned in [Decisions](https://github.com/Gamydas/Hermes-UART-/blob/main/README.md#removing-the-brg-module). 
 
