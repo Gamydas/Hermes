@@ -66,7 +66,7 @@ ARCHITECTURE tb OF TX_tb IS
   --------------------------------------------------------------------------
   -- CONSTANTS DECLARATION --
   -- simulation constants
-  CONSTANT C_CLK_PERIOD : time :=  ns;
+  CONSTANT C_CLK_PERIOD : time := 1 sec / freq;
   CONSTANT bittime : integer := freq/baud; -- in cycles
   -- FSM DECLARATION --
 
@@ -81,8 +81,8 @@ ARCHITECTURE tb OF TX_tb IS
   -- simulation signals
   SIGNAL data : std_logic_vector(7 DOWNTO 0) := (others => '0');
   SIGNAL data_rdy : std_logic := '0';
-  SIGNAL sent_data : std_logic;
-
+  SIGNAL dataline : std_logic;
+  SIGNAL status : std_logic;
 
 
 BEGIN  -- start of architecture --
@@ -96,7 +96,8 @@ BEGIN  -- start of architecture --
       rst => rst,
       data_in   => data,
       data_rdy  => data_rdy,
-      data_out  => sent_data
+      data_out  => dataline,
+      status    => status 
     );
 
   --------------------------------------------------------------------------
@@ -117,10 +118,25 @@ BEGIN  -- start of architecture --
 
   test_runner : PROCESS
     -- VARIABLE DECLARATION.
-
+  VARIABLE parity : std_logic;
+  VARIABLE old_data : std_logic_vector(7 downto 0);
     -- FUNCTIONS/PROCEDURES DECLARATION.
 
-
+  PROCEDURE strobe_bit(CONSTANT expected : std_logic;
+                       CONSTANT name : string;
+                       CONSTANT bittime : integer;
+                       SIGNAL dataline : IN std_logic;
+                       SIGNAL clk : IN std_logic;
+                       CONSTANT line_num : IN natural :=0;        
+                       CONSTANT file_name : IN string  := "") is                               
+  BEGIN
+    wait_N_cycles(bittime/2,clk);
+    WAIT FOR 1 ps;
+    check_equal(dataline, expected, result("for " & name), line_num => line_num, file_name => file_name);
+    -- wait remaining bittime so next call doesnt check at the wrong spot
+    wait_N_cycles(bittime/2, clk);
+    WAIT FOR 1 ps;
+  END PROCEDURE strobe_bit;
   BEGIN
     -- setup VUnit
     test_runner_setup(runner, runner_cfg);
@@ -143,11 +159,11 @@ BEGIN  -- start of architecture --
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
         -- data line has to be high the entire time
-        check(sent_data = '1', "Expected dataline to idle '1'");
+        check(dataline = '1', "Expected dataline to idle '1'");
         for i in 0 to 100 loop
           wait until rising_edge(clk);
           wait for 1 ps;
-          check(sent_data = '1', "Expected dataline to idle '1'");
+          check(dataline = '1', "Expected dataline to idle '1'");
         end loop;
         info("===== TEST CASE FINISHED =====");
       ELSIF run("send_byte_test") THEN
@@ -156,31 +172,180 @@ BEGIN  -- start of architecture --
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
         -- data line should idle
-        check(sent_data = '1', "Expected dataline to idle '1'");
+        check(dataline = '1', "Expected dataline to idle '1'");
         data <= "10010001";
-        wait for 1 ps;
-        data_rdy <= '1';
-        wait for 1 ps;
-        -- start bit should go low for 1 bittime
-        check(sent_data = '0', "Expected dataline to signal start of data '0'");
-        wait_N_cycles(bittime,clk);
-        WAIT FOR 1 ps; 
-        -- tx_enable is high, so the first bit should be sent out
-        check(sent_data = '1', "Expected '1'");
-        wait_N_cycles(bittime,clk);
+        wait_N_cycles(1,clk);
         WAIT FOR 1 ps;
-        check(sent_data = '0', "Expected '0'");
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps; 
+        
+        -- strobing transmission
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 7 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+
+        -- strobe parity and stop bit
+        strobe_bit(parity, "parity bit", bittime, dataline, clk);
+        strobe_bit('1', "stop bit", bittime, dataline, clk);
+        
+
 
         info("===== TEST CASE FINISHED =====");
+      ELSIF run("send_multiple_bytes") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: send_multiple_bytes");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        check(dataline = '1', "Expected dataline to idle '1'");
+        data <= x"FF";
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps; 
+        data_rdy <= '0';
+        -- transmission
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 7 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+
+        -- set new byte
+        data <= "11000001";
+        data_rdy <= '1';
+        
+        -- strobe parity and stop bit
+        strobe_bit(parity, "parity bit", bittime, dataline, clk);
+        strobe_bit('1', "stop bit", bittime, dataline, clk);
+        
+        -- seamless transmittion
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 7 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+
+        -- strobe parity and stop bit
+        strobe_bit(parity, "parity bit", bittime, dataline, clk);
+        strobe_bit('1', "stop bit", bittime, dataline, clk);
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("change_data_during_transmission") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: change_data_during_transmission");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        data <= "10010001";
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps; 
+        data_rdy <= '0';
+        -- strobing transmission
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 3 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+        -- store old data for comparison
+        old_data := data;
+        -- next bit needs to be one regardless of what is data is loaded in the the hold register
+        data <= x"00";
+        data_rdy <= '1';
+        wait for 1 ps;
+        -- new data gets asserted during the strobing procedure on the first possible rising edge
+        FOR i IN 4 TO 7 LOOP
+           strobe_bit(old_data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+        -- strobe parity and stop bit
+        strobe_bit(parity, "parity bit", bittime, dataline, clk);
+        strobe_bit('1', "stop bit", bittime, dataline, clk);
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("reset_during_transmission") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: reset_during_transmission");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        data <= "10010001";
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        -- strobing transmission
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 2 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+        rst <= '1';
+        -- next bit would be one, but reset should put the line back to idling
+        FOR i IN 1 TO 100 LOOP
+          strobe_bit('1', "idle", bittime, dataline, clk);
+        END LOOP;
+        rst <= '0';
+        -- data_rdy is still high, transmission begins again 
+        -- strobing transmission
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 7 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+
+        -- strobe parity and stop bit
+        strobe_bit(parity, "parity bit", bittime, dataline, clk);
+        strobe_bit('1', "stop bit", bittime, dataline, clk);
+        
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("idle_between_transmissions") THEN
+       info("--------------------------------------------------------------------------------");
+       info("TEST CASE: idle-between_transmissions");
+       info("--------------------------------------------------------------------------------");
+       WAIT UNTIL rst = '0';
+        check(dataline = '1', "Expected dataline to idle '1'");
+        data <= x"FF";
+        wait until rising_edge(clk);
+        wait for 1 ps;
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps; 
+        data_rdy <= '0';
+        -- transmission
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 7 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+        
+        -- strobe parity and stop bit
+        strobe_bit(parity, "parity bit", bittime, dataline, clk);
+        strobe_bit('1', "stop bit", bittime, dataline, clk);
+        
+      
+        FOR i IN 0 TO 100 LOOP
+          strobe_bit('1', "idle", bittime, dataline, clk);
+        END LOOP;
+      
+        -- set new byte
+        data <=x"00";
+        data_rdy <= '1';
+     
+        parity := xor data; 
+        strobe_bit('0', "start bit", bittime, dataline, clk);
+        FOR i IN 0 TO 7 LOOP
+          strobe_bit(data(i), "data bit" & to_string(i), bittime, dataline, clk);
+        END LOOP;
+
+
+       info("===== TEST CASE FINISHED ====="); 
       END IF; -- for test_suite
     END LOOP test_cases_loop;
     WAIT FOR 20 ns;
     test_runner_cleanup(runner); -- end of simulation
   END PROCESS test_runner;
-
-  --------------------------------------------------------------------------
-  -- MONITOR PROCESSES AND CONCURRENT CHECKS.
-  --------------------------------------------------------------------------
-  
 
 END ARCHITECTURE tb;
