@@ -6,7 +6,7 @@
 --  % DATE_CREATED: 2026-08-16 %
 --                                                                        --
 --  DESCRIPTION:                                                          --
---  - description
+--  FSM based UART Transmitter. BRG as a process within the module
 --                                                                        --
 ----------------------------------------------------------------------------
 --  REVISION HISTORY                                                      --
