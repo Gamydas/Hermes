@@ -86,8 +86,10 @@ Realistically continuous transmission could look like this:
 **[IMAGE FOLLOWS]**
 
 
+
 ### Block Schematic
-**[Coming soon]**
+![Tx BlockSchematic](doc/TxBlock.png)
+
 
 
 ## Modules
@@ -98,7 +100,7 @@ Realistically continuous transmission could look like this:
 ## Decisions 
 
 ### Removing the BRG module  
-Previously this was a separate module, however this caused timing issues, causing a 1 clock cycle delay between the end of the bittime and the actual transmission of data, while this wouldn't have broken the design, I prefered to change it to a single process within the `Tx` module and later the `Rx` module.
+Previously this was a separate module, however this caused timing issues, causing a 1 clock cycle delay between the end of the bittime and the actual transmission of data, while this wouldn't have broken the design, I preferred to change it to a single process within the `Tx` module and later the `Rx` module.
 
 ### Implementing an OSR
 I've decided to implement oversampling to allow the receiver to make a best of 3 decision for enhanced safety against glitches.
@@ -118,6 +120,8 @@ In the projects root directory there is a `run.py` file. With this we control th
 ### Currently implemented Tests
 
 **[Coming Soon]**
+
+
 
 ### Deprecated Modules
 Space where deprecated contents can still be found. Unsure if this will be deleted at some point.
