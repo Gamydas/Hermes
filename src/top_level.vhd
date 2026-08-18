@@ -83,7 +83,7 @@ BEGIN  -- start of architecture --
   pul: pulse
   PORT MAP(clk => clk, rst => not rst, x => rdy_deb, y => rdy_key);
 
-  DUT: TX_wbrg 
+  DUT: TX 
   GENERIC MAP(freq => 50_000_000, baud => 115200)
   PORT MAP(clk => clk, rst => not rst, data_rdy => rdy_key, data_in => data_in, data_out => data_out);
 
