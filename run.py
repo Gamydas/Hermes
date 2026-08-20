@@ -33,10 +33,13 @@ TX_tb.add_config(name="four_cycles", generics=dict(freq=4*115200, baud=115200))
 # real board values: 50e6/(16*115200) = 27.127, truncated to 27
 TX_tb.add_config(name="real_board", generics=dict(freq=50_000_000, baud=115200))
 
-RX_tb.add_config(name="sixteen_cycles",  generics=dict(freq=16*115200, baud=115200))
-RX_tb.add_config(name="thritytwo_cycles", generics=dict(freq=32*115200, baud=115200))
-# real board values: 50e6/(16*115200) = 27.127, truncated to 27
-RX_tb.add_config(name="real_board", generics=dict(freq=50_000_000, baud=115200))
+RX_tb.add_config(name="1.8432MHz_9600B",  generics=dict(freq=1_843_200, baud=9600))
+RX_tb.add_config(name="1.8432MHz_115200B",  generics=dict(freq=1_843_200, baud=115200))
+RX_tb.add_config(name="12MHz_115200B",  generics=dict(freq=12_000_000, baud=115200))
+RX_tb.add_config(name="20MHz_115200B",  generics=dict(freq=20_000_000, baud=115200))
+RX_tb.add_config(name="50MHz_9600B",  generics=dict(freq=50_000_000, baud=9600))
+
+RX_tb.add_config(name="50MHz_115200B", generics=dict(freq=50_000_000, baud=115200))
 
 
 
@@ -51,7 +54,7 @@ RX_tb.set_sim_option("modelsim.vsim_flags", ["-voptargs=+acc"])
 
 for tb in tb_lib.get_test_benches():
   tb.set_sim_option("modelsim.init_file.gui", str(ROOT) + "/waves/" + tb.name + "_wave.do")
-
+  tb.set_sim_option("modelsim.init_files.after_load", ["dump.do"])
 VU.main()
 
 
