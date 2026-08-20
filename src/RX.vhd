@@ -190,6 +190,11 @@ BEGIN  -- start of architecture --
       WHEN data   => IF (data_cnt < 8 AND tick_cnt = bit_mid+3 AND tick = baud_tick - 1) THEN
                        shift_en <= '1'; 
                      END IF;
+      -- this is needed to resync the RX to TX incase there is a small drift in bittime so it doesn't accumulate 
+      WHEN stop   => IF (tick_cnt = bit_mid+3) THEN
+                       next_state <= idle;
+                       eval_rst <= '1';
+                     END IF;
       WHEN OTHERS => null;
     END CASE;
     -- state transition block for all transitions that require the end of a bittime
@@ -201,8 +206,7 @@ BEGIN  -- start of architecture --
         WHEN data   => IF (data_cnt >= 8) THEN next_state <= parity; 
                        END IF;
         WHEN parity => next_state <= stop;
-        WHEN stop   => next_state <= start;
-                       eval_rst <= '1';
+
         WHEN OTHERS => null;
       END CASE;
     END IF; 
