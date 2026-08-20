@@ -137,7 +137,7 @@ BEGIN  -- start of architecture --
        
         -- samples the bit a fixed 3 times instead of over the entire
         -- validity window as in old implementation
-        IF (tick_cnt = bit_mid-1 OR tick_cnt = bit_mid OR tick_cnt = bit_mid+1) AND tick = baud_tick-1 THEN
+        IF (tick_cnt = bit_mid-1 OR tick_cnt = bit_mid OR tick_cnt = bit_mid + 1) AND tick = baud_tick-1 THEN
           eval_bit <= Rx & eval_bit(2 DOWNTO 1);
         END IF;
 

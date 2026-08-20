@@ -67,6 +67,7 @@ ARCHITECTURE tb OF RX_tb IS
   -- CONSTANTS DECLARATION --
   -- simulation constants
   CONSTANT C_CLK_PERIOD : time :=  1 sec / freq;
+  CONSTANT C_BIT_TIME : time := 1 sec / baud;
   CONSTANT bittime : integer := freq/baud; -- in cycles
   -- INTERNAL SIGNALS DECLARATION --
   -- DUT interface
@@ -145,30 +146,28 @@ BEGIN  -- start of architecture --
     -- test bit sampling by calling the function multiple times in 1 bittime
     -- with different values
     PROCEDURE drive_dataline(SIGNAL dataline : OUT std_logic;
-                             SIGNAL clk      : IN std_logic;
                              CONSTANT value  : IN std_logic;
-                             CONSTANT cycles : IN integer) IS
+                             CONSTANT dur : IN time) IS
     BEGIN
       dataline <= value;
-      wait_N_cycles(cycles,clk);
+      WAIT FOR dur;
     END PROCEDURE;
     
     PROCEDURE send_frame(SIGNAL dataline : OUT std_logic;
-                         SIGNAL clk      : IN std_logic;
                          CONSTANT start: IN std_logic;
                          CONSTANT data : IN std_logic_vector(7 DOWNTO 0);
                          CONSTANT par  : IN std_logic;
                          CONSTANT stop : IN std_logic;
-                         CONSTANT cycles : IN integer) IS
+                         CONSTANT dur : IN time) IS
     BEGIN
       -- set dataline low for 1 cycle to start receiver FSM 
-      drive_dataline(dataline, clk, '0', 1);
-      drive_dataline(dataline, clk, start, cycles-1);
+      drive_dataline(dataline, '0', 1 ps);
+      drive_dataline(dataline, start, dur);
       FOR i IN 0 TO 7 LOOP
-        drive_dataline(dataline, clk, data(i), cycles);
+        drive_dataline(dataline, data(i), dur);
       END LOOP;
-      drive_dataline(dataline, clk, par, cycles);
-      drive_dataline(dataline, clk, stop, cycles);
+      drive_dataline(dataline, par, dur);
+      drive_dataline(dataline, stop, dur);
     END PROCEDURE;
 
   BEGIN
@@ -199,7 +198,7 @@ BEGIN  -- start of architecture --
         info("TEST CASE: receive_one_byte");
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
-        send_frame(tb_line, clk, '0', "10010001", even_par("10010001"), '1', bittime);    
+        send_frame(tb_line, '0', "10010001", even_par("10010001"), '1', C_BIT_TIME);    
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("10010001"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
@@ -210,37 +209,37 @@ BEGIN  -- start of architecture --
         info("TEST CASE: receive_multiple_bytes");
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
-        send_frame(tb_line, clk, '0', "11110010", even_par("11110010"), '1', bittime);
+        send_frame(tb_line, '0', "11110010", even_par("11110010"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("11110010"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
 
-        send_frame(tb_line, clk, '0', "01001111", even_par("01001111"), '1', bittime);
+        send_frame(tb_line, '0', "01001111", even_par("01001111"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("01001111"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
 
-        send_frame(tb_line, clk, '0', "01001001", even_par("01001001"), '1', bittime);
+        send_frame(tb_line, '0', "01001001", even_par("01001001"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("01001001"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
 
-        send_frame(tb_line, clk, '0', "00111100", even_par("00111100"), '1', bittime);
+        send_frame(tb_line, '0', "00111100", even_par("00111100"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("00111100"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
 
-        send_frame(tb_line, clk, '0', "10101010", even_par("10101010"), '1', bittime);
+        send_frame(tb_line, '0', "10101010", even_par("10101010"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("10101010"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
 
-        send_frame(tb_line, clk, '0', "01010101", even_par("01010101"), '1', bittime);
+        send_frame(tb_line, '0', "01010101", even_par("01010101"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("01010101"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
@@ -251,25 +250,25 @@ BEGIN  -- start of architecture --
         info("TEST CASE: receive_with_idle_gaps");
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
-        send_frame(tb_line, clk, '0', "11110010", even_par("11110010"), '1', bittime);
+        send_frame(tb_line, '0', "11110010", even_par("11110010"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("11110010"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
         
         -- idle
-        drive_dataline(tb_line, clk, '1', 2*bittime);
+        drive_dataline(tb_line, '1', 2*C_BIT_TIME);
 
-        send_frame(tb_line, clk, '0', "01001111", even_par("01001111"), '1', bittime);
+        send_frame(tb_line, '0', "01001111", even_par("01001111"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("01001111"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
         
         -- idle
-        drive_dataline(tb_line, clk, '1', 4*bittime);
+        drive_dataline(tb_line, '1', 4*C_BIT_TIME);
 
-        send_frame(tb_line, clk, '0', "01001001", even_par("01001001"), '1', bittime);
+        send_frame(tb_line, '0', "01001001", even_par("01001001"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("01001001"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
@@ -281,21 +280,21 @@ BEGIN  -- start of architecture --
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0'; 
         -- force parity error
-        send_frame(tb_line, clk, '0', "01001111", not even_par("01001111"), '1', bittime);
+        send_frame(tb_line, '0', "01001111", not even_par("01001111"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("01001111"), result("for Rx output buffer"));
         check(parity_err = '1', "Expected parity error to be '1'");
         check(frame_err = '0', "Expected frame error to be '0'");
         
         -- force stopbit error
-        send_frame(tb_line, clk, '0', "10101010", even_par("10101010"), '0', bittime);
+        send_frame(tb_line, '0', "10101010", even_par("10101010"), '0', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("10101010"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '1', "Expected frame error to be '1'");
 
         -- force stop and parity error
-        send_frame(tb_line, clk, '0', "00111100", not even_par("00111100"), '0', bittime);
+        send_frame(tb_line, '0', "00111100", not even_par("00111100"), '0', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("00111100"), result("for Rx output buffer"));
         check(parity_err = '1', "Expected parity error to be '1'");
@@ -308,19 +307,209 @@ BEGIN  -- start of architecture --
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
         
-        send_frame(tb_line, clk, '0', "00111100", not even_par("00111100"), '0', bittime);
+        send_frame(tb_line, '0', "00111100", not even_par("00111100"), '0', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("00111100"), result("for Rx output buffer"));
         check(parity_err = '1', "Expected parity error to be '1'");
         check(frame_err = '1', "Expected frame error to be '1'");
        
-        send_frame(tb_line, clk, '0', "01001111", even_par("01001111"), '1', bittime);
+        send_frame(tb_line, '0', "01001111", even_par("01001111"), '1', C_BIT_TIME);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("01001111"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '0', "Expected frame error to be '0'");
         info("===== TEST CASE FINISHED =====");
-      
+      ELSIF run("-1%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: -1%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (99*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with -1% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("-2%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: -2%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (98*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with -1% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("-3%_timing_test") THEN 
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: -3%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (97*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with -3% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("-4%_timing_test") THEN 
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: -4%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (96*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with -4% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("-5%_timing_test") THEN 
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: -5%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (95*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with -5% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("-6%_timing_test") THEN 
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: -6%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (94*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with -6% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("+1%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: +1%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (101*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with +1% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("+2%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: +2%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (102*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with +2% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("+3%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: +3%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (103*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with +3% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("+4%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: +4%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (104*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with +4% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("+5%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: +5%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (105*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with +5% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("+6%_timing_test") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: +6%_timing_test");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        send_frame(tb_line, '0', "11001100", even_par("11001100"), '1', (106*C_BIT_TIME)/100);
+        WAIT ON dst_data FOR 2*C_BIT_TIME;
+        check_equal(dst_data, std_logic_vector'("11001100"), result("for package with +6% bittime"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("reset_during_receive") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: reset_during_receive");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        drive_dataline(tb_line, '0', C_BIT_TIME);
+        drive_dataline(tb_line, '1', C_BIT_TIME);
+        drive_dataline(tb_line, '1', C_BIT_TIME);
+        rst <= '1';
+        check_equal(dst_data, 0, result("for Rx output buffer during reset"));
+        wait_N_cycles(10,clk);
+        WAIT FOR 1 ps;
+        rst <= '0';
+        wait for 1 ps;
+        check_equal(dst_data, 0, result("for Rx output buffer after reset"));
+        send_frame(tb_line, '0', "10001111", even_par("10001111"), '1', C_BIT_TIME);
+        check_equal(dst_data, std_logic_vector'("10001111"), result("for Rx output buffer"));
+        check(parity_err = '0', "Expected no parity error");
+        check(frame_err = '0', "Expected no frame error");
+        info("===== TEST CASE FINISHED =====");
+      ELSIF run("loopback") THEN
+        info("--------------------------------------------------------------------------------");
+        info("TEST CASE: loopback");
+        info("--------------------------------------------------------------------------------");
+        WAIT UNTIL rst = '0';
+        use_tx <= true;
+        src_data <= "11111100";
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        wait_N_cycles(11*bittime,clk);
+        WAIT FOR 1 ps;
+        check_equal(dst_data, std_logic_vector'("11111100"), result("for loopback"));
+        
+        src_data <= "00000001";
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        wait_N_cycles(11*bittime,clk);
+        WAIT FOR 1 ps;
+        check_equal(dst_data, std_logic_vector'("00000001"), result("for loopback"));
+        
+        src_data <= "11000000";
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        data_rdy <= '1';
+        wait_N_cycles(1,clk);
+        WAIT FOR 1 ps;
+        wait_N_cycles(11*bittime,clk);
+        WAIT FOR 1 ps;
+        check_equal(dst_data, std_logic_vector'("11000000"), result("for loopback"));
+
+
+
+        info("===== TEST CASE FINISHED =====");
       END IF; -- for test_suite
     END LOOP test_cases_loop;
 
