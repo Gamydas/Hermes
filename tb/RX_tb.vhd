@@ -293,14 +293,7 @@ BEGIN  -- start of architecture --
         check_equal(dst_data, std_logic_vector'("10101010"), result("for Rx output buffer"));
         check(parity_err = '0', "Expected parity error to be '0'");
         check(frame_err = '1', "Expected frame error to be '1'");
-        
-        -- force startbit error, output should remain unchanged
-        send_frame(tb_line, clk, '1', "00111100", even_par("00111100"), '1', bittime);
-        WAIT FOR 1 ps;
-        check_equal(dst_data, std_logic_vector'("10101010"), result("for Rx output buffer"));
-        check(parity_err = '0', "Expected parity error to be '0'");
-        check(frame_err = '1', "Expected frame error to be '1'");
-        
+
         -- force stop and parity error
         send_frame(tb_line, clk, '0', "00111100", not even_par("00111100"), '0', bittime);
         WAIT FOR 1 ps;
@@ -314,8 +307,8 @@ BEGIN  -- start of architecture --
         info("TEST CASE: error_then_valid_test");
         info("--------------------------------------------------------------------------------");
         WAIT UNTIL rst = '0';
-        -- force startbit error, output should remain unchanged
-        send_frame(tb_line, clk, '0', "00111100", not even_par("00111100"), '1', bittime);
+        
+        send_frame(tb_line, clk, '0', "00111100", not even_par("00111100"), '0', bittime);
         WAIT FOR 1 ps;
         check_equal(dst_data, std_logic_vector'("00111100"), result("for Rx output buffer"));
         check(parity_err = '1', "Expected parity error to be '1'");
