@@ -23,7 +23,7 @@ tb_lib = VU.add_library("tb_lib")
 # add testbench source files to tb_lib
 tb_lib.add_source_files([TEST_PATH / "*.vhd"])
 
-BRG_tb = tb_lib.test_bench("BRG_tb")
+RX_tb = tb_lib.test_bench("RX_tb")
 TX_tb = tb_lib.test_bench("TX_tb")
 # since baud will be kept at 115200 and freq will be varied
 
@@ -33,12 +33,19 @@ TX_tb.add_config(name="four_cycles", generics=dict(freq=4*115200, baud=115200))
 # real board values: 50e6/(16*115200) = 27.127, truncated to 27
 TX_tb.add_config(name="real_board", generics=dict(freq=50_000_000, baud=115200))
 
+RX_tb.add_config(name="sixteen_cycles",  generics=dict(freq=16*115200, baud=115200))
+RX_tb.add_config(name="thritytwo_cycles", generics=dict(freq=32*115200, baud=115200))
+# real board values: 50e6/(16*115200) = 27.127, truncated to 27
+RX_tb.add_config(name="real_board", generics=dict(freq=50_000_000, baud=115200))
+
+
+
 
 
 
 # So we see all internal signals
-BRG_tb.set_sim_option("modelsim.vsim_flags", ["-voptargs=+acc"])
-
+TX_tb.set_sim_option("modelsim.vsim_flags", ["-voptargs=+acc"])
+RX_tb.set_sim_option("modelsim.vsim_flags", ["-voptargs=+acc"])
 
 
 
