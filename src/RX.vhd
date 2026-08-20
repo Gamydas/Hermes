@@ -55,10 +55,13 @@ ARCHITECTURE rtl OF RX IS
   SIGNAL eval_rst : std_logic;
   SIGNAL val : std_logic;
   -- BRG signals
-  -- 16 baud_ticks are one bittime, allows taking multiple samples
   CONSTANT baud_tick : integer := freq/(16*baud);
+  -- due to rounding, 16*baud_tick would cause errors when baud_tick is getting rounded
+  -- more than 0.5 
+  CONSTANT tick_amt : integer := (freq/baud)/baud_tick;
+  CONSTANT bit_mid : integer := tick_amt/2;
   SIGNAL baud_gen_en : std_logic;
-  SIGNAL tick_cnt : integer RANGE 0 TO 16 := 0; 
+  SIGNAL tick_cnt : integer RANGE 0 TO tick_amt := 0; 
   SIGNAL tick : integer  RANGE 0 to baud_tick;
   -- receiver register signals
   SIGNAL rx_shift_reg : std_logic_vector(7 DOWNTO 0);
@@ -79,7 +82,7 @@ BEGIN  -- start of architecture --
           (eval_bit(1) AND eval_bit(2))  OR
           (eval_bit(0) AND eval_bit(2)));
   -- This Signal exists to make the transition logic in the FSM more readable
-  bit_end <= '1' WHEN tick_cnt = 15 AND tick = baud_tick - 1 ELSE
+  bit_end <= '1' WHEN tick_cnt = tick_amt-1 AND tick = baud_tick - 1 ELSE
              '0';
 
   -- Baud enable generator with an OSR of 16
@@ -94,7 +97,7 @@ BEGIN  -- start of architecture --
         tick <= 0;
         tick_cnt <= tick_cnt + 1;
         -- resets tick_cnt after a full bittime
-        IF (tick_cnt = 15) THEN
+        IF (tick_cnt = tick_amt-1) THEN
           tick_cnt <= 0;
         END IF;
       END IF;
@@ -134,12 +137,12 @@ BEGIN  -- start of architecture --
        
         -- samples the bit a fixed 3 times instead of over the entire
         -- validity window as in old implementation
-        IF (tick_cnt = 7 OR tick_cnt = 8 OR tick_cnt = 9) AND tick = baud_tick-1 THEN
+        IF (tick_cnt = bit_mid-1 OR tick_cnt = bit_mid OR tick_cnt = bit_mid+1) AND tick = baud_tick-1 THEN
           eval_bit <= Rx & eval_bit(2 DOWNTO 1);
         END IF;
 
         -- sampling phase is over
-        IF (tick_cnt = 10) THEN
+        IF (tick_cnt = bit_mid+2) THEN
           -- state driven demultiplexer to correctly assign evaluated bit
           -- to the correct state signals
           CASE state IS
@@ -184,7 +187,7 @@ BEGIN  -- start of architecture --
                        baud_gen_en <= '0';
                      END IF;
                      eval_rst <= '1';
-      WHEN data   => IF (data_cnt < 8 AND tick_cnt = 11 AND tick = baud_tick - 1) THEN
+      WHEN data   => IF (data_cnt < 8 AND tick_cnt = bit_mid+3 AND tick = baud_tick - 1) THEN
                        shift_en <= '1'; 
                      END IF;
       WHEN OTHERS => null;
@@ -224,7 +227,7 @@ BEGIN  -- start of architecture --
       parity_err <= '0';
       frame_err <= '0';
     ELSIF clk = '1' AND clk'EVENT THEN
-      IF (tick_cnt = 11) THEN
+      IF (tick_cnt = bit_mid+3) THEN
         CASE state IS
           WHEN parity => IF (parity_val /= (rx_shift_reg(0) xor rx_shift_reg(1) xor
                                             rx_shift_reg(2) xor rx_shift_reg(3) xor 
