@@ -32,7 +32,7 @@ USE IEEE.NUMERIC_STD.ALL;
             baud : integer := 115200);
     PORT(clk, rst, Rx : IN STD_LOGIC;
          data_out  : OUT std_logic_vector(7 DOWNTO 0);
-         parity_err, frame_err : OUT std_logic
+         parity_err, frame_err, received : OUT std_logic
         );
   END ENTITY RX;
 
@@ -86,7 +86,6 @@ BEGIN  -- start of architecture --
              '0';
 
   -- Baud enable generator with an OSR of 16
-  -- After 16 ticks the bittime is over
   baud_gen: PROCESS(clk)
   BEGIN
   IF clk = '1' and clk'event THEN
@@ -230,6 +229,7 @@ BEGIN  -- start of architecture --
       par_err <= '0';
       parity_err <= '0';
       frame_err <= '0';
+      received <= '0';
     ELSIF clk = '1' AND clk'EVENT THEN
       IF (tick_cnt = bit_mid+3) THEN
         CASE state IS
@@ -243,6 +243,8 @@ BEGIN  -- start of architecture --
                            par_err <= '1';
                          ELSE par_err <= '0';
                          END IF;
+                         -- reset the received flag before new data is put on the buffer
+                         received <= '0';
           WHEN stop   => -- stop_val = 0 -> error, stop_val = 1 -> no error
                          frame_err <= not stop_val; 
                          -- to keep parity and data synced we output parity here
@@ -251,6 +253,7 @@ BEGIN  -- start of architecture --
                          -- write data even if errors occur, Rx owner has to decide
                          -- what to do with faulty packages
                          data_out <= rx_shift_reg;
+                         received <= '1';
           WHEN OTHERS => null;
         END CASE;
       END IF;
