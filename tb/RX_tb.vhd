@@ -85,7 +85,7 @@ ARCHITECTURE tb OF RX_tb IS
   SIGNAL status : std_logic;
   SIGNAL parity_err : std_logic;
   SIGNAL frame_err : std_logic;
-
+  SIGNAL received : std_logic;
 
 
 BEGIN  -- start of architecture --
@@ -100,7 +100,8 @@ BEGIN  -- start of architecture --
       Rx         => dataline,
       data_out   => dst_data,
       parity_err => parity_err,
-      frame_err => frame_err
+      frame_err => frame_err,
+      received => received
       );
   
   TX_inst : ENTITY SRC_LIB.TX(rtl)
