@@ -160,7 +160,6 @@ BEGIN  -- start of architecture --
                          CONSTANT stop : IN std_logic;
                          CONSTANT dur : IN time) IS
     BEGIN
-      -- set dataline low for 1 cycle to start receiver FSM 
       drive_dataline(dataline, '0', 1 ps);
       drive_dataline(dataline, start, dur);
       FOR i IN 0 TO 7 LOOP
