@@ -38,7 +38,6 @@ USE IEEE.NUMERIC_STD.ALL;
          data_out_buf : OUT STD_LOGIC_VECTOR(7 DOWNTO 0);
          data_out_par : OUT std_logic;
          data_out_frame: OUT std_logic;
-         data_out_received: OUT std_logic;
          -- _out/in is nessecary due to naming conflicts because of the module names
          tx_out: OUT std_logic;
          rx_in : IN std_logic
@@ -104,7 +103,7 @@ BEGIN  -- start of architecture --
   DUTRx: RX
   GENERIC MAP(freq => 50_000_000, baud => 115200)
   PORT MAP(clk => clk, rst => not rst, Rx => rx_in, data_out => data_out_buf, parity_err => data_out_par,
-           frame_err => data_out_frame, received => data_out_received);
+           frame_err => data_out_frame, received => open);
 
 
 
