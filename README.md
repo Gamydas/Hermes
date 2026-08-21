@@ -108,6 +108,7 @@ Realistically continuous transmission could look like this:
 | data_out | OUT | 8 bit wide signal connected to an internal register storing the received byte | 
 | parity_err | OUT | status flag to signal that the received frame has a parity error |
 | frame_err | OUT | status flag to signal that the received frame has a framing error caused by a faulty stop bit | 
+| received | OUT | status flag to signal that a new write has happend |
 
 ### Functionality
 
@@ -127,15 +128,18 @@ of the sampling process and it drives the output of the receiver. \
 Besides the FSM the receiver also consists of a SiPo shift register to serially read in data, a BRG, a holding register/buffer at the output to store
 the received frames data and a 3 bit shift registers to sample the incoming data around the `mid`. \
 
-Once the start bit goes low the Receiver will start recording the incoming frame and store it in the output buffer regardless 
-of wether it is a correct frame or not (as signaled by the status flags). The overlying owner of the module needs to decide
-what to do with faulty packages. \
-
 The `sample_bit` process containing the 3 bit shift register samples the dataline 3 times per bittime on `mid-1`, `mid` and `mbp+1`. 
 The actual evaluation happens concurrently in the `val` signal via a majority decision(best of 3). On `mid + 2` we have a guaranteed actionable sample. The sampled and 
 evaluated bit gets sent into a demultiplexer which is driven by the FSM. This decides into which register its stored, `start_val`, `data_in`,
 `parity_val` or `stop_val`. `start_val` is used at the end of the first bittime to see wether the receiver goes into data reception mode or back to idling.
-These others are used for at `mbp + 3` to either drive the shift register or set the status flags.
+These others are used for at `mbp + 3` to either drive the shift register or set the status flags. \
+
+**The receiver does not discard faulty frames.** This is important to take note of. When a frame contains an error, the appropriate status flag
+will still be written into the output buffer. This is also why **the parity_err flag gets set during the `stop` state not the `parity` state**,
+to ensure that status flags and output buffer are always synchronized. \
+
+A `received` status flag has been added to signal to the overlying logic whenever a new write has happend. It goes high during the `stop` state when all data is written to the
+output and goes low again in the `parity` state, i.e. before the next package arrives, giving plenty of time to process the data.
 
 ### Timing and Tolerance
 
@@ -174,12 +178,12 @@ As stated before, the divison floors causing shorter than actual bittimes.
 
 | freq | baud | Passing range | Lower limit | Upper limit |
 | --- | --- | --- | --- | --- |
-| 1.8432 MHz | 9600 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
-| 1.8432 MHz | 115200 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
-| 12 MHz | 115200 | −6 % … +3 % | below −6 %, not bracketed | between +3 % and +4 % |
-| 20 MHz | 115200 | −6 % … +3 % | below −6 %, not bracketed | between +3 % and +4 % |
-| 50 MHz | 9600 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
-| 50 MHz | 115200 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
+| 1.8432 MHz | 9600 | −4 % to +5 % | between −5 % and −4 % | between +5 % and +6 % |
+| 1.8432 MHz | 115200 | −4 % to +5 % | between −5 % and −4 % | between +5 % and +6 % |
+| 12 MHz | 115200 | −6 % to +3 % | below −6 %, not bracketed | between +3 % and +4 % |
+| 20 MHz | 115200 | −6 % to +3 % | below −6 %, not bracketed | between +3 % and +4 % |
+| 50 MHz | 9600 | −4 % to +5 % | between −5 % and −4 % | between +5 % and +6 % |
+| 50 MHz | 115200 | −4 % to +5 % | between −5 % and −4 % | between +5 % and +6 % |
 
 As we can see, configurations without a severe intrinsic error are roughly symmetrical around 0 with a range of roughly +-5%.
 Configurations with a noticable intrinsic error (in this case the 12 MHz and the 20 MHz config) cause the window to be shifted down
@@ -189,6 +193,10 @@ by the amount of the error. The theoretical limit of UART error tolerance lies a
 
 Every configuration passes within the window of **+-3%**. While some configurations can work outside of this aswell, this is the only
 guarantee we can derive from tests and is considered the safe margin of error to maintain in a UART transmission.  
+
+
+### Block Schematic
+**[Work in Progess]**
 
 ## Modules
 
@@ -202,6 +210,15 @@ Previously this was a separate module, however this caused timing issues, causin
 
 ### Implementing an OSR
 I've decided to implement oversampling to allow the receiver to make a best of 3 decision for enhanced safety against glitches.
+
+### Faulty frames are not discarded by the receiver
+To make draw a clear line in terms of responsibilities, the receivers only job is to read in serial date, evaluate the bits, check the frame
+and regardless of the result write the frame data to the output buffer, so the overlying logic can decide what to do with damaged data.
+
+### Rx FSM always cycles back into idle state
+When the stop bit has been evaluated and frame data was written to the output buffer(at `mid+3`) the FSM transitions back to idle
+and thus resets the BRG, staying there for `tick_amt-(mid+3)` ticks before going back to the `start` state. This avoids
+an accumlating drift in the counter when timing discrepancies occur and keeps the received synced to the transmitter.
 
 
 ## Testing and Verification
