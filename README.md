@@ -11,7 +11,9 @@ To make certain things easier to explain and keep terminology uniform I have pre
 | bitmid(short: `mid`) | 1/2 bittime |
 | tick | Frequency/(OSR*Baudrate), i.e 1/OSR of a bittime(in clock cycles) |
 
-### Not implemented yet
+### Not implemented yet/To Dos
+- Configurable Frame for Receiver and transmitter. Currently it is fixed at 8E1.
+- Fix naming in Tx module to match the Rx module namings as they are a bit more thought through
 
 ### Known Issues
 
@@ -47,7 +49,7 @@ The UART Transmitter(`Tx.vhd`) transmits data as defined by the UART protocol in
 | --- | --- | --- |
 | clk | IN | system clock port |
 | rst | IN | global async reset port |
-| data_rdy | IN | port for the source of the data to tell the transmitter that data has been put on on the data_in port. This data takes on cycle to be written into the buffer/holding register of the transmitter, so wait atleast 1 cycle between putting data on the bus and setting data_rdy high |
+| data_rdy | IN | port for the source of the data to tell the transmitter that data has been put on the `data_in` port. This data takes one cycle to be written into the buffer/holding register of the transmitter, so wait at least 1 cycle between putting data on the bus and setting data_rdy high |
 | data_in | IN | 8 bit bus line from which the transmission data is read. Data on the bus gets loaded into the holding register at the first legal clock cycle |
 | data_out | OUT | The serial output of the transmitter | 
 | status | OUT | status signal of the transmitter, used to signal the beginning of a transmission/successful acceptance of bus data |
@@ -74,8 +76,8 @@ The counter wraps at bittime-1 instead of bittime because this allows the FSM to
 To begin transmission the data on the bus(`data_in`) must first be loaded into the holding register(1 cycle) and then `data_rdy` has to be set high for atleast 1 more clock cycle. This starts the transition between `idle` and `start` state. 
 
 For continuous data transmission the transmitter outputs a status signal. This signal goes high for exactly 1 bittime when the start state is entered, before going back to low. The source of data can use this in many ways, as data in the 
-shift register can not be changed anymore once the `start` state has been entered. This means that the source can reliably send new data on the rising edge of this signal, on the continous high level or on the falling edge. All 3 guarantee 
-that the new data will be asserted, **IF** the `data_rdy` signal is high when the `stop` state of is exited. 
+shift register can not be changed anymore once the `start` state has been entered. This means that the source can reliably send new data on the rising edge of this signal, on the continuous high level or on the falling edge. All 3 guarantee 
+that the new data will be asserted, **IF** the `data_rdy` signal is high when the `stop` state is exited. 
 
 Realistically continuous transmission could look like this: 
 **[IMAGE FOLLOWS]**
@@ -103,7 +105,7 @@ Realistically continuous transmission could look like this:
 | data_out | OUT | 8 bit wide signal connected to an internal register storing the received byte | 
 | parity_err | OUT | status flag to signal that the received frame has a parity error |
 | frame_err | OUT | status flag to signal that the received frame has a framing error caused by a faulty stop bit | 
-| received | OUT | status flag to signal that a new write has happend |
+| received | OUT | status flag to signal that a new write has happened |
 
 ### Functionality
 
@@ -118,20 +120,20 @@ The receiver is driven by a `5 State FSM`, containing the states `idle`, `start`
 | `stop` | Reception of stop bit. If stop bit does not match the `frame_err` flag will be set. The faulty frame will still be written into the output buffer and displayed alongside the status flags |
 
 The receivers FSM is used as a general driver of the system. It drives the enable signal for the shift register, it drives the synchronous reset
-of the sampling process and it drives the output of the receiver. \
+of the sampling process and it drives the output of the receiver. 
 
 Besides the FSM the receiver also consists of a SiPo shift register to serially read in data, a BRG, a holding register/buffer at the output to store
-the received frames data and a 3 bit shift registers to sample the incoming data around the `mid`. \
+the received frames data and a 3 bit shift registers to sample the incoming data around the `mid`. 
 
 The `sample_bit` process containing the 3 bit shift register samples the dataline 3 times per bittime on `mid-1`, `mid` and `mid+1`. 
 The actual evaluation happens concurrently in the `val` signal via a majority decision(best of 3). On `mid + 2` we have a guaranteed actionable sample. The sampled and 
-evaluated bit gets sent into a demultiplexer which is driven by the FSM. This decides into which register its stored, `start_val`, `data_in`,
-`parity_val` or `stop_val`. `start_val` is used at the end of the first bittime to see wether the receiver goes into data reception mode or back to idling.
-These others are used for at `mid + 3` to either drive the shift register or set the status flags. \
+evaluated bit gets sent into a demultiplexer which is driven by the FSM. This decides into which register it's stored, `start_val`, `data_in`,
+`parity_val` or `stop_val`. `start_val` is used at the end of the first bittime to see whether the receiver goes into data reception mode or back to idling.
+The others are used at `mid + 3` to either drive the shift register or set the status flags. 
 
 **The receiver does not discard faulty frames.** This is important to take note of. When a frame contains an error, the appropriate status flag
 will be set and the frame data is still written into the output buffer. This is also why **the parity_err flag gets set during the `stop` state not the `parity` state**,
-to ensure that status flags and output buffer are always synchronized. \
+to ensure that status flags and output buffer are always synchronized. 
 
 A `received` status flag has been added to signal to the overlying logic whenever a new write has happend. It goes high during the `stop` state when all data is written to the
 output and goes low again in the `parity` state, i.e. before the next package arrives, giving plenty of time to process the data.
@@ -247,7 +249,7 @@ These tests have been implemented for the transmitter module.
 #### RX_tb
 As the receiver turned out to be a greater challenge than the transmitter, there are more configurations and testcases for this module.
 
-The configuration list was made based on my findings only of what the most common UART configurations are.
+The configuration list was made based on my findings of what the most common UART configurations are.
 | Configuration | Frequency | Baud| 
 | --- | --- | --- |
 | `1.8432MHz_9600B` | 1.8432 MHz | 9600 |
@@ -263,15 +265,15 @@ This list represents all the functional tests of the receiver.
 | `idle_test` | Dataline is held high. No false receptions |
 | `receive_one_byte` | A single byte is being received as 8E1-frame in the correct timeframe |
 | `receive_multiple_bytes` | Seamless reception of multiple bytes |
-| `receive_with_idle_gaps` | Receiving bytes with differing idle periods inbetween. Idling between reception does not corrupt or damage packages and does not impact Rx functionality |
+| `receive_with_idle_gaps` | Receiving bytes with differing idle periods in between. Idling between reception does not corrupt or damage packages and does not impact Rx functionality |
 | `error_tests` | Forcefully transmit wrong parity and stop bits to test that status flag outputs of the receiver correctly work |
 | `error_then_valid_test` | Forcefully transmit a faulty frame and then send a correct one. The correct frame overwrites the faulty one in the buffer and resets status flags |
 | `reset_during_receive` | Reset is set high('1') during reception. Reception stops and no half finished packages remain in any buffer |
 | `loopback` | Tx output is put on the dataline. Tx and Rx can succesfully communicate with one another |
 
 This list represents all timing specific test of the receiver. For these tests the testbench was refitted to no longer use clock
-cycles to wait out time but instead wait bittimes in (micro)seconds as definied by the C_BIT_TIME constant. This had to be done 
-because waiting for clock cycles was to rigid and unprecise for these tests.
+cycles to wait out time but instead wait bittimes in (micro)seconds as defined by the `C_BIT_TIME` constant. This had to be done 
+because waiting for clock cycles was too rigid and unprecise for these tests.
 | Test case | Transmitter deviation |
 | --- | --- |
 | `-6%_timing_test` to `-1%_timing_test` | −6 % to −1 % in 1 % steps |
@@ -283,7 +285,7 @@ Space where deprecated contents can still be found. Unsure if this will be delet
 
 ### Baud Rate Generator
 The Baud Rate Generator(`BRG.vhd`) generates one cycle pulses for both tx and rx logic, i.e. telling both the transmitter when to send and the receiver when to read. For the Rx side, the BRG sends 3 pulses centered around
-the bit_mid to decide out of a best of 3 when reading differing signals during this window. I.e Rx reads '1' at `mid-1`, '0' at `mid` and '1' on `mid + 1`, Rx will assume that 1 is the correct value.
+the `mid` to decide out of a best of 3 when reading differing signals during this window. I.e Rx reads '1' at `mid-1`, '0' at `mid` and '1' on `mid + 1`, Rx will assume that 1 is the correct value.
 
 | Generic | Purpose | 
 | --- | --- |
