@@ -11,11 +11,11 @@ To make certain things easier to explain and keep terminology uniform I have pre
 | bitmid(short: `mid`) | 1/2 bittime |
 | tick | Frequency/(OSR*Baudrate), i.e 1/OSR of a bittime(in clock cycles) |
 
-### Not implemented yet/To Dos
+## Not implemented yet/To Dos
 - Configurable Frame for Receiver and transmitter. Currently it is fixed at 8E1.
 - Fix naming in Tx module to match the Rx module namings as they are a bit more thought through
 
-### Known Issues
+## Known Issues
 
 ## Hardware and Toolchain
 
@@ -32,7 +32,15 @@ If you wish to run tests, do not do it via quartus, as the testbenches have not 
 ## How to Use
 
 
-## Timing Data 
+## Synthesis Timing Data 
+The following are data is derived from the synthesis of the `uart.vhd` top level entity used for hardware testing the UART.
+Static timing analysis was run with the Quartus Timing Analyzer against `UART.sdc`,
+which constrains `System_Clock` to a 20 ns period (50 MHz). 
+| Corner | Fmax | Setup slack in ns| Hold slack in ns | Min. pulse width in ns |
+| --- | --- | --- | --- | --- |
+| Slow 1200 mV 85 °C | 187.69 MHz | 14.672 | 0.347 | 9.635 |
+| Slow 1200 mV 0 °C | 202.80 MHz | 15.069 | 0.311 | 9.647 |
+| Fast 1200 mV 0 °C | — | 17.696 | 0.152 | 9.329 |
 
 ## Architecture Transmitter (Tx)
 The UART Transmitter(`Tx.vhd`) transmits data as defined by the UART protocol in the form of 8E1, meaning 8 bits of data, Even parity and one stop bit. Both parity and length of the stop bit might become generically configurable in the future.
