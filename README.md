@@ -7,8 +7,8 @@ To make certain things easier to explain and keep terminology uniform I have pre
 | Word/Phrase | Definition |
 | --- | --- |
 | BRG | Baud Rate Generator, the module that sends the enable pulses for the receiver and transmitter | 
-| OSR | Oversampling Rate |
-| mid_bit_point(short: mpb) | 1/2 bittime |
+| OSR | Oversampling Rate, for Rx this is fixed at 16 |
+| bitmid(short: `mid`) | 1/2 bittime |
 | tick | Frequency/(OSR*Baudrate), i.e 1/OSR of a bittime(in clock cycles) |
 
 ### Not implemented yet
@@ -33,12 +33,12 @@ If you wish to run tests, do not do it via quartus, as the testbenches have not 
 ## Timing Behavior
 
 - The BRG generates an enable signal for the transmitter for one cycle at the end of a bittime
-- The BRG generates an enable signal for the receiver for one cycle at mbp-1, mbp and mbp+1
+- The BRG generates an enable signal for the receiver for one cycle at `mid-1`, `mid` and `mid+1`
 
 ## Timing Data 
 
 ## Architecture Transmitter (Tx)
-The UART Transmitter(`Tx.vhd`) transmits data as defined by the uart protocol in the form of 8E1, meaning 8 bits of data, Even parity and one stop bit. Both parity and length of the stop bit might become generically configurable in the future.
+The UART Transmitter(`Tx.vhd`) transmits data as defined by the UART protocol in the form of 8E1, meaning 8 bits of data, Even parity and one stop bit. Both parity and length of the stop bit might become generically configurable in the future.
 
 ### Interface/Port Map
 
@@ -55,11 +55,11 @@ The UART Transmitter(`Tx.vhd`) transmits data as defined by the uart protocol in
 | data_rdy | IN | port for the source of the data to tell the transmitter that data has been put on on the data_in port. This data takes on cycle to be written into the buffer/holding register of the transmitter, so wait atleast 1 cycle between putting data on the bus and setting data_rdy high |
 | data_in | IN | 8 bit bus line from which the transmission data is read. Data on the bus gets loaded into the holding register at the first legal clock cycle |
 | data_out | OUT | The serial output of the transmitter | 
-| status | OUT | status signal of the transmitter, used to signal the 
+| status | OUT | status signal of the transmitter, used to signal the beginning of a transmission/successful acceptance of bus data |
 
 
 ### Functionality
-The transmitter is driven by an a `5 State FSM`, containing the states `idle`, `start`, `data`, `parity` and `stop`. Below is a table explaining the different states.
+The transmitter is driven by a `5 State FSM`, containing the states `idle`, `start`, `data`, `parity` and `stop`. Below is a table explaining the different states.
 
 | State | Purpose |
 | --- | --- |
@@ -93,7 +93,102 @@ Realistically continuous transmission could look like this:
 
 ## Architecture Receiver (Rx)
 
+### Interface/Port Map
 
+| Generic | Purpose | 
+| --- | --- |
+| freq | used to configure the UART to the devices frequency,**default is 50 MHz** | 
+| baud | used to set a before agreed upon baud rate, **default is 115200** |
+
+| Ports | Direction | Purpose |
+| --- | --- | --- |
+| clk | IN | system clock port |
+| rst | IN | global async reset port |
+| Rx  | IN | Receivers connection to the dataline, this is where serial data gets read |
+| data_out | OUT | 8 bit wide signal connected to an internal register storing the received byte | 
+| parity_err | OUT | status flag to signal that the received frame has a parity error |
+| frame_err | OUT | status flag to signal that the received frame has a framing error caused by a faulty stop bit | 
+
+### Functionality
+
+The receiver is driven by a `5 State FSM`, containing the states `idle`, `start`, `data`, `parity` and `stop`. Below is a table explaining the different states.
+ 
+| State | Purpose |
+| --- | --- |
+| `idle` | Receivers idling phase. During this time, the BRG is being stopped/reset |
+| `start` | Receivers start bit. This state is triggered when the dataline is pulled low('0') |
+| `data` | Reception of data. 1 Bit gets sampled around the `mid` and then shifted into the `rx_shift_reg` | 
+| `parity` | Reception of parity. If parity does not match the `parity_err` flag will be set **in the stop state** | 
+| `stop` | Reception of stop bit. If stop bit does not match the `frame_err` flag will be set. The faulty frame will still be written into the output buffer and displayed alongside the status flags |
+
+The receivers FSM is used as a general driver of the system. It drives the enable signal for the shift register, it drives the synchronous reset
+of the sampling process and it drives the output of the receiver. \
+
+Besides the FSM the receiver also consists of a SiPo shift register to serially read in data, a BRG, a holding register/buffer at the output to store
+the received frames data and a 3 bit shift registers to sample the incoming data around the `mid`. \
+
+Once the start bit goes low the Receiver will start recording the incoming frame and store it in the output buffer regardless 
+of wether it is a correct frame or not (as signaled by the status flags). The overlying owner of the module needs to decide
+what to do with faulty packages. \
+
+The `sample_bit` process containing the 3 bit shift register samples the dataline 3 times per bittime on `mid-1`, `mid` and `mbp+1`. 
+The actual evaluation happens concurrently in the `val` signal via a majority decision(best of 3). On `mid + 2` we have a guaranteed actionable sample. The sampled and 
+evaluated bit gets sent into a demultiplexer which is driven by the FSM. This decides into which register its stored, `start_val`, `data_in`,
+`parity_val` or `stop_val`. `start_val` is used at the end of the first bittime to see wether the receiver goes into data reception mode or back to idling.
+These others are used for at `mbp + 3` to either drive the shift register or set the status flags.
+
+### Timing and Tolerance
+
+#### Constants
+
+The receiver derives 3 constants from `freq` and `baud`:
+| Constant | Formula | Meaning |
+| --- | --- | --- |
+| `baud_tick` | `freq / (16 * baud)` | Length of one tick in clock cycles |
+| `tick_amt` | `(freq / baud) / baud_tick` | Number of ticks per bittime |
+| `bit_mid` | `tick_amt / 2` | Tick index of `mid` |
+
+The end of a bittime is derived from `tick_amt`*`baud_tick`, not from `16*baud_tick` as division floors, which would cause
+an accumulation of errors. Any `baud_ticks` that would be more than 0.5 over the next lower integer would cause failure of reception.
+
+#### Synchronisation
+
+The BRG starts on the first rising edge after the dataline `Rx` is seen low('0'). After the stop bit is received and the frame data is written
+to the output buffer the FSM transitions to `idle` so to reset the BRG and make sure drift only accumulates over a single frame, not the entire
+data stream.
+
+#### Intrinsic bittime error
+
+As stated before, the divison floors causing shorter than actual bittimes.
+
+| freq | baud | `baud_tick`(floor) | `baud_tick`(actual)| `tick_amt`(floor) | actual | bittime(floor) | bittime(actual) | Intrinsic error |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1.8432 MHz | 9600   | 12 | 12.00 | 16 | 16.00 | 192 | 192.00 | 0.00 % |
+| 1.8432 MHz | 115200 | 1  | 1.00  | 16 | 16.00 | 16  | 16.00  | 0.00 % |
+| 12 MHz     | 115200 | 6  | 6.51  | 17 | 17.36 | 102 | 104.17 | −2.08 % |
+| 20 MHz     | 115200 | 10 | 10.85 | 17 | 17.36 | 170 | 173.61 | −2.08 % |
+| 50 MHz     | 9600   | 325| 325,52| 16 | 16.025| 5200| 5208.33| −0.16 % |
+| 50 MHz     | 115200 | 27 | 27.12 | 16 | 16.075| 432 | 434.03 | −0.47 % |
+
+#### Measured Tolerance
+
+| freq | baud | Passing range | Lower limit | Upper limit |
+| --- | --- | --- | --- | --- |
+| 1.8432 MHz | 9600 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
+| 1.8432 MHz | 115200 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
+| 12 MHz | 115200 | −6 % … +3 % | below −6 %, not bracketed | between +3 % and +4 % |
+| 20 MHz | 115200 | −6 % … +3 % | below −6 %, not bracketed | between +3 % and +4 % |
+| 50 MHz | 9600 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
+| 50 MHz | 115200 | −4 % … +5 % | between −5 % and −4 % | between +5 % and +6 % |
+
+As we can see, configurations without a severe intrinsic error are roughly symmetrical around 0 with a range of roughly +-5%.
+Configurations with a noticable intrinsic error (in this case the 12 MHz and the 20 MHz config) cause the window to be shifted down
+by the amount of the error. The theoretical limit of UART error tolerance lies at ~5%, but this is not a safe marin.
+
+#### Guaranteed Tolerance
+
+Every configuration passes within the window of **+-3%**. While some configurations can work outside of this aswell, this is the only
+guarantee we can derive from tests and is considered the safe margin of error to maintain in a UART transmission.  
 
 ## Modules
 
@@ -134,7 +229,7 @@ These tests have been implemented for the transmitter module.
 | Name | What it proves |
 | --- | --- |
 | `idle_test` | The signal is high('1') after a reset and stays this way |  
-| `send_byte_test` | A single byte is being sent as a 8E1-frame : startbit, eight databits with LSB first, even-parity , stopbit, sampling happens after 1/2 of a bittime |
+| `send_byte_test` | A single byte is being sent as an 8E1-frame : startbit, eight databits with LSB first, even-parity , stopbit, sampling happens after 1/2 of a bittime |
 | `send_multiple_bytes` | Two frames run seamlessly back to back. The second startbit follows directly after the first stopbit without any idletime inbetween. Both parities are being covered in this test |
 | `change_data_during_transmission` | New data is being put on `data_in` during the frame(after databit 3) and `data_rdy` is being set high('1'). Neither changes the currently sent package. |
 | `reset_during_transmission` | `rst` during a frame cancels transmission and sets the dataline igh '1' to signal idling. This state is maintained for 100 cycles before pulling reset back low('0') sending a new frame. The new frame arrives fully intact |
@@ -154,8 +249,25 @@ The configuration list was made based on my findings only of what the most commo
 | `50MHz_9600B` | 50 MHz | 9600 |
 | `50MHz_115200B` | 50 MHz | 115200 |
 
+This list represents all the functional tests of the receiver.
+| Test case | What it proves |
+| --- | --- |
+| `idle_test` | Dataline is held high. No false receptions |
+| `receive_one_byte` | A single byte is being received as 8E1-frame in the correct timeframe |
+| `receive_multiple_bytes` | Seamless reception of multiple bytes |
+| `receive_with_idle_gaps` | Receiving bytes with differing idle periods inbetween. Idling between reception does not corrupt or damage packages and does not impact Rx functionality |
+| `error_tests` | Forcefully transmit wrong parity and stop bits to test that status flag outputs of the receiver correctly work |
+| `error_then_valid_test` | Forcefully transmit a faulty frame and then send a correct one. The correct frame overwrites the faulty one in the buffer and resets status flags |
+| `reset_during_receive` | Reset is set high('1') during reception. Reception stops and no half finished packages remain in any buffer |
+| `loopback` | Tx output is put on the dataline. Tx and Rx can succesfully communicate with one another |
 
-
+This list represents all timing specific test of the receiver. For these tests the testbench was refitted to no longer use clock
+cycles to wait out time but instead wait bittimes in (micro)seconds as definied by the C_BIT_TIME constant. This had to be done 
+because waiting for clock cycles was to rigid and unprecise for these tests.
+| Test case | Transmitter deviation |
+| --- | --- |
+| `-6%_timing_test` to `-1%_timing_test` | −6 % to −1 % in 1 % steps |
+| `+1%_timing_test` to `+6%_timing_test` | +1 % to +6 % in 1 % steps |
 
 
 ### Deprecated Modules
