@@ -30,11 +30,6 @@ If you wish to run tests, do not do it via quartus, as the testbenches have not 
 ## How to Use
 
 
-## Timing Behavior
-
-- The BRG generates an enable signal for the transmitter for one cycle at the end of a bittime
-- The BRG generates an enable signal for the receiver for one cycle at `mid-1`, `mid` and `mid+1`
-
 ## Timing Data 
 
 ## Architecture Transmitter (Tx)
@@ -128,14 +123,14 @@ of the sampling process and it drives the output of the receiver. \
 Besides the FSM the receiver also consists of a SiPo shift register to serially read in data, a BRG, a holding register/buffer at the output to store
 the received frames data and a 3 bit shift registers to sample the incoming data around the `mid`. \
 
-The `sample_bit` process containing the 3 bit shift register samples the dataline 3 times per bittime on `mid-1`, `mid` and `mbp+1`. 
+The `sample_bit` process containing the 3 bit shift register samples the dataline 3 times per bittime on `mid-1`, `mid` and `mid+1`. 
 The actual evaluation happens concurrently in the `val` signal via a majority decision(best of 3). On `mid + 2` we have a guaranteed actionable sample. The sampled and 
 evaluated bit gets sent into a demultiplexer which is driven by the FSM. This decides into which register its stored, `start_val`, `data_in`,
 `parity_val` or `stop_val`. `start_val` is used at the end of the first bittime to see wether the receiver goes into data reception mode or back to idling.
-These others are used for at `mbp + 3` to either drive the shift register or set the status flags. \
+These others are used for at `mid + 3` to either drive the shift register or set the status flags. \
 
 **The receiver does not discard faulty frames.** This is important to take note of. When a frame contains an error, the appropriate status flag
-will still be written into the output buffer. This is also why **the parity_err flag gets set during the `stop` state not the `parity` state**,
+will be set and the frame data is still written into the output buffer. This is also why **the parity_err flag gets set during the `stop` state not the `parity` state**,
 to ensure that status flags and output buffer are always synchronized. \
 
 A `received` status flag has been added to signal to the overlying logic whenever a new write has happend. It goes high during the `stop` state when all data is written to the
@@ -153,7 +148,7 @@ The receiver derives 3 constants from `freq` and `baud`:
 | `bit_mid` | `tick_amt / 2` | Tick index of `mid` |
 
 The end of a bittime is derived from `tick_amt`*`baud_tick`, not from `16*baud_tick` as division floors, which would cause
-an accumulation of errors. Any `baud_ticks` that would be more than 0.5 over the next lower integer would cause failure of reception.
+an accumulation of errors causing failed reception. 
 
 #### Synchronisation
 
@@ -171,8 +166,8 @@ As stated before, the divison floors causing shorter than actual bittimes.
 | 1.8432 MHz | 115200 | 1  | 1.00  | 16 | 16.00 | 16  | 16.00  | 0.00 % |
 | 12 MHz     | 115200 | 6  | 6.51  | 17 | 17.36 | 102 | 104.17 | −2.08 % |
 | 20 MHz     | 115200 | 10 | 10.85 | 17 | 17.36 | 170 | 173.61 | −2.08 % |
-| 50 MHz     | 9600   | 325| 325,52| 16 | 16.025| 5200| 5208.33| −0.16 % |
-| 50 MHz     | 115200 | 27 | 27.12 | 16 | 16.075| 432 | 434.03 | −0.47 % |
+| 50 MHz     | 9600   | 325| 325.52| 16 | 16.025| 5200| 5208.33| −0.16 % |
+| 50 MHz     | 115200 | 27 | 27.13 | 16 | 16.075| 432 | 434.03 | −0.47 % |
 
 #### Measured Tolerance
 
@@ -186,21 +181,17 @@ As stated before, the divison floors causing shorter than actual bittimes.
 | 50 MHz | 115200 | −4 % to +5 % | between −5 % and −4 % | between +5 % and +6 % |
 
 As we can see, configurations without a severe intrinsic error are roughly symmetrical around 0 with a range of roughly +-5%.
-Configurations with a noticable intrinsic error (in this case the 12 MHz and the 20 MHz config) cause the window to be shifted down
-by the amount of the error. The theoretical limit of UART error tolerance lies at ~5%, but this is not a safe marin.
+Configurations with a noticeable intrinsic error (in this case the 12 MHz and the 20 MHz config) cause the window to be shifted down
+by the amount of the error. The theoretical limit of UART error tolerance lies at ~5%, but this is not a safe margin.
 
 #### Guaranteed Tolerance
 
-Every configuration passes within the window of **+-3%**. While some configurations can work outside of this aswell, this is the only
+Every configuration passes within the window of **+-3%**. While some configurations can work outside of this as well, this is the only
 guarantee we can derive from tests and is considered the safe margin of error to maintain in a UART transmission.  
 
 
 ### Block Schematic
-**[Work in Progess]**
-
-## Modules
-
-
+**[Work in Progress]**
 
 
 ## Decisions 
@@ -212,13 +203,13 @@ Previously this was a separate module, however this caused timing issues, causin
 I've decided to implement oversampling to allow the receiver to make a best of 3 decision for enhanced safety against glitches.
 
 ### Faulty frames are not discarded by the receiver
-To make draw a clear line in terms of responsibilities, the receivers only job is to read in serial date, evaluate the bits, check the frame
+To draw a clear line in terms of responsibilities, the receivers only job is to read in serial data, evaluate the bits, check the frame
 and regardless of the result write the frame data to the output buffer, so the overlying logic can decide what to do with damaged data.
 
 ### Rx FSM always cycles back into idle state
 When the stop bit has been evaluated and frame data was written to the output buffer(at `mid+3`) the FSM transitions back to idle
 and thus resets the BRG, staying there for `tick_amt-(mid+3)` ticks before going back to the `start` state. This avoids
-an accumlating drift in the counter when timing discrepancies occur and keeps the received synced to the transmitter.
+an accumulating drift in the counter when timing discrepancies occur and keeps the receiver synced to the transmitter.
 
 
 ## Testing and Verification
@@ -249,7 +240,7 @@ These tests have been implemented for the transmitter module.
 | `send_byte_test` | A single byte is being sent as an 8E1-frame : startbit, eight databits with LSB first, even-parity , stopbit, sampling happens after 1/2 of a bittime |
 | `send_multiple_bytes` | Two frames run seamlessly back to back. The second startbit follows directly after the first stopbit without any idletime inbetween. Both parities are being covered in this test |
 | `change_data_during_transmission` | New data is being put on `data_in` during the frame(after databit 3) and `data_rdy` is being set high('1'). Neither changes the currently sent package. |
-| `reset_during_transmission` | `rst` during a frame cancels transmission and sets the dataline igh '1' to signal idling. This state is maintained for 100 cycles before pulling reset back low('0') sending a new frame. The new frame arrives fully intact |
+| `reset_during_transmission` | `rst` during a frame cancels transmission and sets the dataline high '1' to signal idling. This state is maintained for 100 cycles before pulling reset back low('0') sending a new frame. The new frame arrives fully intact |
 | `idle_between_transmissions` | A frame is being sent over the dataline before entering the idle state for a specified(100 bittimes in this case) before sending the next frame. Both arrive fully intact |
 
 
@@ -292,7 +283,7 @@ Space where deprecated contents can still be found. Unsure if this will be delet
 
 ### Baud Rate Generator
 The Baud Rate Generator(`BRG.vhd`) generates one cycle pulses for both tx and rx logic, i.e. telling both the transmitter when to send and the receiver when to read. For the Rx side, the BRG sends 3 pulses centered around
-the mid-bit-point to decide out of a best of 3 when reading differing signals during this window. I.e Rx reads '1' at mbp-1, '0' at mbp and '1' on mbp + 1, Rx will assume that 1 is the correct value.
+the bit_mid to decide out of a best of 3 when reading differing signals during this window. I.e Rx reads '1' at `mid-1`, '0' at `mid` and '1' on `mid + 1`, Rx will assume that 1 is the correct value.
 
 | Generic | Purpose | 
 | --- | --- |
@@ -312,7 +303,7 @@ the mid-bit-point to decide out of a best of 3 when reading differing signals du
 
 | Test case | What it proves |
 | --- | --- |
-| tx_rx_test | proves tx_enable sends a one clock cycle long pulse after a full bittime and x_enable sends a pulse after 1/2 -1 bittime and after the next 2 ticks, centered around the half of a bittime |
+| tx_rx_test | proves tx_enable sends a one clock cycle long pulse after a full bittime and rx_enable sends a pulse after 1/2 -1 bittime and after the next 2 ticks, centered around the half of a bittime |
 | tx_rx_over_10_bittimes | proves that tx_enable and rx_enable behavior does not change/drift apart over time |
 | sync_test | tests if sync signal works as intended and resets the counter |
 | sync_before_tx_pulse | tests if sync works as intended at a different testing point, right before tx_enable should go high |
