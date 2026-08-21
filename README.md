@@ -37,7 +37,7 @@ If you wish to run tests, do not do it via quartus, as the testbenches have not 
 
 ## Timing Data 
 
-## Architecture Transmitter(Tx)
+## Architecture Transmitter (Tx)
 The UART Transmitter(`Tx.vhd`) transmits data as defined by the uart protocol in the form of 8E1, meaning 8 bits of data, Even parity and one stop bit. Both parity and length of the stop bit might become generically configurable in the future.
 
 ### Interface/Port Map
@@ -91,6 +91,9 @@ Realistically continuous transmission could look like this:
 ![Tx BlockSchematic](doc/TxBlock.png)
 
 
+## Architecture Receiver (Rx)
+
+
 
 ## Modules
 
@@ -114,12 +117,44 @@ Look up the installation guide for VUnit before continuing.
 In the projects root directory there is a `run.py` file. With this we control the entire test environment.
 - The command `python run.py` starts every test in every testbench, depending on the amount of tests there are, this could take a while.
 - To start a specific test or testbench we instead run `python run.py *[name of testbench].[name of test]`. `[name of test]` can be substituted with an asterisk to start every test in the testbench.
-- In this project I have also included multiple configurations, called `one_cycle`, `two_cycles`, `4_cycles`, `real_board` to test the design with different tick cycle lengths.
-  - These can be specified by typing `python run.py *[name of testbench].[configuration].[name of test]` into your  terminal
+- To specify a configuration type `python run.py *[name of testbench].[configuration].[name of test]` into your  terminal
 
-### Currently implemented Tests
+### Currently implemented tests and configurations
 
-**[Coming Soon]**
+#### TX_tb
+
+This is a list of all configurations that are implemented for the transmitter testbench. This list is significantly shorter than the one of the receiver due to entirely different timing constraints. 
+| Configuration | Frequency | Baud| 
+| --- | --- | --- |
+| `two_cycles` | 2*115200 Hz | 115200 |
+| `four_cycles` | 4*115200 Hz | 115200 |
+| `real_board` | 50 MHz | 115200 |
+
+These tests have been implemented for the transmitter module.
+| Name | What it proves |
+| --- | --- |
+| `idle_test` | The signal is high('1') after a reset and stays this way |  
+| `send_byte_test` | A single byte is being sent as a 8E1-frame : startbit, eight databits with LSB first, even-parity , stopbit, sampling happens after 1/2 of a bittime |
+| `send_multiple_bytes` | Two frames run seamlessly back to back. The second startbit follows directly after the first stopbit without any idletime inbetween. Both parities are being covered in this test |
+| `change_data_during_transmission` | New data is being put on `data_in` during the frame(after databit 3) and `data_rdy` is being set high('1'). Neither changes the currently sent package. |
+| `reset_during_transmission` | `rst` during a frame cancels transmission and sets the dataline igh '1' to signal idling. This state is maintained for 100 cycles before pulling reset back low('0') sending a new frame. The new frame arrives fully intact |
+| `idle_between_transmissions` | A frame is being sent over the dataline before entering the idle state for a specified(100 bittimes in this case) before sending the next frame. Both arrive fully intact |
+
+
+#### RX_tb
+As the receiver turned out to be a greater challenge than the transmitter, there are more configurations and testcases for this module.
+
+The configuration list was made based on my findings only of what the most common UART configurations are.
+| Configuration | Frequency | Baud| 
+| --- | --- | --- |
+| `1.8432MHz_9600B` | 1.8432 MHz | 9600 |
+| `1.8432MHz_115200B` | 1.8432 MHz | 115200 |
+| `12MHz_115200B` | 12 MHz | 115200 |
+| `20MHz_115200B`| 20 MHz| 115200 |
+| `50MHz_9600B` | 50 MHz | 9600 |
+| `50MHz_115200B` | 50 MHz | 115200 |
+
+
 
 
 
