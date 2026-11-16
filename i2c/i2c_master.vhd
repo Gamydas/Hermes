@@ -54,7 +54,7 @@ ENTITY i2c_master IS
     data_load     : OUT   STD_LOGIC;
     addr_cnt_load : OUT   STD_LOGIC;                    -- Signals when and which information has been loaded
     SDA           : INOUT STD_LOGIC;                    -- open drain data line
-    SCL           : OUT   STD_LOGIC);                   -- not open drain, no clock stretching supported yet
+    SCL           : INOUT   STD_LOGIC);                 -- open drain, no clock stretching supported yet
 END ENTITY;
 
 ----------------------------------------------------------------------------
@@ -92,7 +92,7 @@ ARCHITECTURE rtl OF i2c_master IS
   SIGNAL   clk_cnt   : INTEGER RANGE 0 TO PRESCALER;
   SIGNAL   sda_i     : STD_LOGIC;
   SIGNAL   sda_o     : STD_LOGIC;
-
+  SIGNAL   scl_o     : STD_LOGIC;
   -- Master <-> ByC Signals
   SIGNAL slave_ack, master_ack : STD_LOGIC;
   SIGNAL cmd                   : STD_LOGIC_VECTOR(2 DOWNTO 0); -- ByC instruction
@@ -158,7 +158,7 @@ BEGIN  -- start of architecture --
       clk => clk, rst => rst, clk_en => clk_en,
       request => ByC_req, byte_i => ByC2BiC, byte_o => BiC2ByC,
       byte_cmd => ByC_cmd, bit_done => BiC_done,
-      sda_i => sda_i, sda_o => sda_o, scl => SCL);
+      sda_i => sda_i, sda_o => sda_o, scl => scl_o);
 
   ByC: i2c_bytecontrol
     PORT MAP(
@@ -175,6 +175,7 @@ BEGIN  -- start of architecture --
   SDA <= '0' WHEN sda_o = '0' ELSE 'Z';
   sda_i <= to_X01(SDA); -- to_X01 for simulation
 
+  SCL <= '0' WHEN scl_o = '0' ELSE 'Z'; 
   RnW <= '0' WHEN r_cnt = 0 ELSE '1';
   data_o <= rdata;                                     -- rdata comes from a register, r_valid signals its good to read
 
