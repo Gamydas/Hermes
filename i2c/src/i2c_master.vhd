@@ -286,12 +286,10 @@ BEGIN  -- start of architecture --
   BEGIN
     next_state <= state; -- default assignment
     load <= '0';
-    busy <= '1';         -- busy in every state except idle
     CASE state IS
 
       WHEN idle =>
 
-        busy <= '0';
         IF (S = '1') THEN
           next_state <= start;
         END IF;
@@ -399,11 +397,12 @@ BEGIN  -- start of architecture --
     master_ack <= ACK;
     cmd <= "111";       -- unused state to prevent latch
     req <= '0';
+    busy <= '1';         -- busy in every state except idle
     CASE state IS
 
       WHEN idle =>
 
-        NULL;
+        busy <= '0';
 
       WHEN start =>
 
