@@ -25,9 +25,10 @@ tb_lib.add_source_files([TEST_PATH / "*.vhd"])
 
 I2C_tb = tb_lib.test_bench("tb_i2c")
 
-I2C_tb.add_config(name="Standard",  generics=dict(sys_freq=20_000_000, scl_freq=100_000))
-I2C_tb.add_config(name="Fast",  generics=dict(sys_freq=125_000_000, scl_freq=400_000))
-I2C_tb.add_config(name="FastPlus",  generics=dict(sys_freq=125_000_000, scl_freq=1_000_000))
+# timing constraints in nanoseconds to avoid remain in integers
+I2C_tb.add_config(name="Standard",  generics=dict(sys_freq=20_000_000, scl_freq=100_000, thd_sta=4000, tsu_sta=4700, tsu_sto=4000, t_buf=4700))
+I2C_tb.add_config(name="Fast",  generics=dict(sys_freq=125_000_000, scl_freq=400_000, thd_sta=600, tsu_sta=600, tsu_sto=600, t_buf=1300))
+I2C_tb.add_config(name="FastPlus",  generics=dict(sys_freq=125_000_000, scl_freq=1_000_000, thd_sta=260, tsu_sta=260, tsu_sto=260, t_buf=500))
 
 # So we see all internal signals
 I2C_tb.set_sim_option("modelsim.vsim_flags", ["-voptargs=+acc"])
