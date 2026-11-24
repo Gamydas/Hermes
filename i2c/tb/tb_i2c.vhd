@@ -83,26 +83,26 @@ ARCHITECTURE tb OF tb_i2c IS
   CONSTANT C_TSU_STA    : TIME := tsu_sta * 1 ns;
   CONSTANT C_TSU_STO    : TIME := tsu_sto * 1 ns;
   CONSTANT C_T_BUF      : TIME := t_buf   * 1 ns;
-  CONSTANT C_T_LOW      : time := t_low   * 1 ns;
-  CONSTANT C_T_HIGH     : time := t_high  * 1 ns;
-  CONSTANT C_TSU_DAT    : time := tsu_dat * 1 ns;
+  CONSTANT C_T_LOW      : TIME := t_low   * 1 ns;
+  CONSTANT C_T_HIGH     : TIME := t_high  * 1 ns;
+  CONSTANT C_TSU_DAT    : TIME := tsu_dat * 1 ns;
 
   -- Arrays to store read and write data in
   TYPE byte_array IS ARRAY(NATURAL RANGE <>) OF STD_LOGIC_VECTOR(7 DOWNTO 0);
 
   -- data that slave sends to master
-  CONSTANT R_BYTES : byte_array(3 DOWNTO 0)          := (x"A1", x"B2", x"C3", x"D4");
-  SIGNAL   r_idx   : INTEGER RANGE 0 TO R_BYTES'HIGH := 0; -- integer exactly the size of w_bytes length
+  CONSTANT SL_W_BYTES : byte_array(15 DOWNTO 0)         := (x"FF", x"FE", x"FD", x"FC", x"FB", x"FA", x"F9", x"F8", x"F7", x"F6", x"F5", x"F4", x"A1", x"B2", x"C3", x"D4");
+  SIGNAL   sl_w_idx   : INTEGER RANGE 0 TO SL_W_BYTES'HIGH := 0; -- integer exactly the size of w_bytes length
 
   -- data that slave receives
-  SIGNAL w_bytes : byte_array(3 DOWNTO 0)            := (OTHERS => (OTHERS => '0'));
-  SIGNAL w_idx   : INTEGER RANGE 0 TO w_bytes'LENGTH := 0; -- integer exactly the size of w_bytes length
+  SIGNAL sl_r_bytes : byte_array(15 DOWNTO 0)           := (OTHERS => (OTHERS => '0'));
+  SIGNAL sl_r_idx   : INTEGER RANGE 0 TO sl_r_bytes'LENGTH := 0; -- integer exactly the size of w_bytes length
 
   -- data that master sends
-  SIGNAL m_w_bytes : byte_array(3 DOWNTO 0)              := (OTHERS => (OTHERS => '0'));
+  SIGNAL m_w_bytes : byte_array(15 DOWNTO 0)             := (OTHERS => (OTHERS => '0'));
   SIGNAL m_w_idx   : INTEGER RANGE 0 TO m_w_bytes'LENGTH := 0; -- integer exactly the size of m_w_bytes length
 
-  SIGNAL m_r_bytes : byte_array(3 DOWNTO 0)              := (OTHERS => (OTHERS => '0'));
+  SIGNAL m_r_bytes : byte_array(15 DOWNTO 0)             := (OTHERS => (OTHERS => '0'));
   SIGNAL m_r_idx   : INTEGER RANGE 0 TO m_r_bytes'LENGTH := 0; -- integer exactly the size of m_r_bytes length
 
   -- SCL Monitor
@@ -236,7 +236,7 @@ BEGIN  -- start of architecture --
   --------------------------------------------------------------------------
   --------------------------------------------------------------------------
 
-  test_runner_watchdog(runner, 10 ms);
+  test_runner_watchdog(runner, 50 ms);
 
   test_runner: PROCESS
 
@@ -259,7 +259,7 @@ BEGIN  -- start of architecture --
       m_pnsr <= PnSr;
       m_addr <= Addr;
       m_w_amt <= w_amt;
-      m_w_bytes <= data;
+      m_w_bytes(3 DOWNTO 0) <= data;
       WAIT FOR 1 ps;
       -- pulse start
       start <= '1';
@@ -325,6 +325,7 @@ BEGIN  -- start of architecture --
       m_S <= '0';
       WAIT FOR 1 ps;
 
+
     END PROCEDURE configure_WM8731;
 
     PROCEDURE wait_for_master IS
@@ -369,8 +370,15 @@ BEGIN  -- start of architecture --
         -- wait for transaction end
         wait_for_master;
         check(nack_flag = '0', "Expected no NACK");
-        check_equal(w_idx, 0, "Slave must not report data reception");
+        check_equal(sl_r_idx, 0, "Slave must not report data reception");
         info("===== TEST CASE FINISHED =====");
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- Master Transmits one byte over SDA
+      -- Expected Result:
+      -- Slave acknowledges address and byte and transaction stops without error
+      ----------------------------------------------------------------------
       ELSIF run("Transmit_one_byte") THEN
         info("--------------------------------------------------------------------------------");
         info("TEST CASE: transmit_one_byte");
@@ -378,11 +386,18 @@ BEGIN  -- start of architecture --
         WAIT UNTIL rst = '0';
         i2c_write('1', SL_ADDR, std_logic_vector(to_unsigned(1, m_w_amt'length)), (x"A1", x"FF", x"32", x"10"), m_S);
         wait_for_master;
-        check_equal(w_bytes(0), std_logic_vector'(x"10"), result("For slave read buffer"));
-        check_equal(w_idx, 1, "Bytes received by slave");
+        check_equal(sl_r_bytes(0), std_logic_vector'(x"10"), result("For slave read buffer"));
+        check_equal(sl_r_idx, 1, "Bytes received by slave");
         check_equal(m_w_idx, 1, "Expected only 1 data_load pulse");
         check(nack_flag = '0', "Expected no NACK");
         info("===== TEST CASE FINISHED =====");
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- Master Transmits four byte over SDA
+      -- Expected Result:
+      -- Slave acknowledges address and all bytes and transaction stops without error
+      ----------------------------------------------------------------------
       ELSIF run("Transmit_multiple_bytes") THEN
         info("--------------------------------------------------------------------------------");
         info("TEST CASE: transmit_multiple_bytes");
@@ -390,14 +405,21 @@ BEGIN  -- start of architecture --
         WAIT UNTIL rst = '0';
         i2c_write('1', SL_ADDR, std_logic_vector(to_unsigned(4, m_w_amt'length)), (x"A1", x"FF", x"32", x"10"), m_S);
         wait_for_master;
-        check_equal(w_idx, 4, "Bytes received by slaved");
+        check_equal(sl_r_idx, 4, "Bytes received by slaved");
         check_equal(m_w_idx, 4, "data_load pulses");
-        check_equal(w_bytes(0), std_logic_vector'(x"10"), result("For slave read buffer pos(0)"));
-        check_equal(w_bytes(1), std_logic_vector'(x"32"),  result("For slave read buffer pos(1)"));
-        check_equal(w_bytes(2), std_logic_vector'(x"FF"), result("For slave read buffer pos(2)"));
-        check_equal(w_bytes(3), std_logic_vector'(x"A1"),  result("For slave read buffer pos(3)"));
+        check_equal(sl_r_bytes(0), std_logic_vector'(x"10"), result("For slave read buffer pos(0)"));
+        check_equal(sl_r_bytes(1), std_logic_vector'(x"32"),  result("For slave read buffer pos(1)"));
+        check_equal(sl_r_bytes(2), std_logic_vector'(x"FF"), result("For slave read buffer pos(2)"));
+        check_equal(sl_r_bytes(3), std_logic_vector'(x"A1"),  result("For slave read buffer pos(3)"));
         check(nack_flag = '0', "Expected no NACK");
         info("===== TEST CASE FINISHED =====");
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- Master requests one byte from the slave
+      -- Expected Result:
+      -- Slave acknowledges address and sends exactly one byte and transaction stops without error
+      ----------------------------------------------------------------------
       ELSIF run("read_one_byte") THEN
         info("--------------------------------------------------------------------------------");
         info("TEST CASE: read_one_byte");
@@ -409,6 +431,13 @@ BEGIN  -- start of architecture --
         check_equal(m_r_idx, 1, "r_valid pulses");
         check(nack_flag = '0', "Expected no NACK");
         info("===== TEST CASE FINISHED =====");
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- Master requests four bytes from the slave
+      -- Expected Result:
+      -- Slave acknowledges address and sends exactly four bytes and transaction stops without error
+      ----------------------------------------------------------------------
       ELSIF run("read_multiple_bytes") THEN
         info("--------------------------------------------------------------------------------");
         info("TEST CASE: read_multiple_bytes");
@@ -420,9 +449,19 @@ BEGIN  -- start of architecture --
         check_equal(m_r_bytes(1), std_logic_vector'(x"C3"), result("For master read buffer pos(1)"));
         check_equal(m_r_bytes(2), std_logic_vector'(x"B2"), result("For master read buffer pos(2)"));
         check_equal(m_r_bytes(3), std_logic_vector'(x"A1"), result("For master read buffer pos(3)"));
-        check_equal(m_r_idx, 4, "r_valid pulses");
         check(nack_flag = '0', "Expected no NACK");
+        wait_n_cycles(10000, clk); -- waiting some time to test whether activity happens on the bus during idle
+        check_equal(m_r_idx, 4, "r_valid pulses");
+        check_equal(sl_w_idx, 4, "Expected slave to write no more than 4 bytes");
         info("===== TEST CASE FINISHED =====");
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- Master sends four bytes, then stops -> starts and then another 4 bytes
+      -- so the concurrent monitor can check the bus free time constraint
+      -- Expected Result:
+      -- t_buf is met as required by the i2c specifications
+      ----------------------------------------------------------------------
       ELSIF run("test_tbuf") THEN
         info("--------------------------------------------------------------------------------");
         info("TEST CASE: test_tbuf");
@@ -430,10 +469,10 @@ BEGIN  -- start of architecture --
         WAIT UNTIL rst = '0';
         i2c_write('1', SL_ADDR, std_logic_vector(to_unsigned(4, m_w_amt'length)), (x"A1", x"FF", x"32", x"10"), m_S);
         wait_for_master;
-        check_equal(w_bytes(0), std_logic_vector'(x"10"), result("For slave read buffer pos(0)"));
-        check_equal(w_bytes(1), std_logic_vector'(x"32"),  result("For slave read buffer pos(1)"));
-        check_equal(w_bytes(2), std_logic_vector'(x"FF"), result("For slave read buffer pos(2)"));
-        check_equal(w_bytes(3), std_logic_vector'(x"A1"),  result("For slave read buffer pos(3)"));
+        check_equal(sl_r_bytes(0), std_logic_vector'(x"10"), result("For slave read buffer pos(0)"));
+        check_equal(sl_r_bytes(1), std_logic_vector'(x"32"),  result("For slave read buffer pos(1)"));
+        check_equal(sl_r_bytes(2), std_logic_vector'(x"FF"), result("For slave read buffer pos(2)"));
+        check_equal(sl_r_bytes(3), std_logic_vector'(x"A1"),  result("For slave read buffer pos(3)"));
         check(nack_flag = '0', "Expected no NACK");
         i2c_read('1', SL_ADDR, std_logic_vector(to_unsigned(4, m_r_amt'length)), m_S);
         wait_for_master;
@@ -442,6 +481,14 @@ BEGIN  -- start of architecture --
         check_equal(m_r_bytes(2), std_logic_vector'(x"B2"), result("For master read buffer pos(2)"));
         check_equal(m_r_bytes(3), std_logic_vector'(x"A1"), result("For master read buffer pos(3)"));
         info("===== TEST CASE FINISHED =====");
+   
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- Master sends one byte, triggers repeat start and then sends another byte
+      -- so the concurrent monitor can check the start setup time constraint
+      -- Expected Result:
+      -- tsu_sta is met as required by the i2c specifications
+      ----------------------------------------------------------------------
       ELSIF run("test_tsu_sta") THEN
         info("--------------------------------------------------------------------------------");
         info("TEST CASE: test_tsu_sta");
@@ -452,10 +499,20 @@ BEGIN  -- start of architecture --
         WAIT ON m_addr_cnt_load;
         i2c_write('1', SL_ADDR, std_logic_vector(to_unsigned(1, m_w_amt'length)), (x"A1", x"FF", x"22", x"F0"), m_S);
         wait_for_master;
-        check_equal(w_bytes(0), std_logic_vector'(x"33"), result("For slave read buffer pos(0)"));
-        check_equal(w_bytes(1), std_logic_vector'(x"22"), result("For slave read buffer pos(0)"));
+        check_equal(sl_r_bytes(0), std_logic_vector'(x"33"), result("For slave read buffer pos(0)"));
+        check_equal(sl_r_bytes(1), std_logic_vector'(x"22"), result("For slave read buffer pos(0)"));
         check(nack_flag = '0', "Expected no NACK");
         info("===== TEST CASE FINISHED =====");
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- Master sends 1 bytes, triggers reapeat start and then requests 4 bytes.
+      -- This is important to test as a lot of slaves need to be configured first before
+      -- they can send data.
+      -- Expected Result:
+      -- Exactly one byte is written by the master and exactly 4 bytes are sent by the
+      -- slave
+      ----------------------------------------------------------------------
       ELSIF run("test_write_sr_read") THEN
         info("--------------------------------------------------------------------------------");
         info("TEST CASE: test_write_sr_read");
@@ -467,34 +524,42 @@ BEGIN  -- start of architecture --
         WAIT ON m_addr_cnt_load;
         m_PnSr <= '1';
         wait_for_master;
-        check_equal(w_bytes(0), std_logic_vector'(x"33"), result("For slave read buffer pos(0)"));
+        check_equal(sl_r_bytes(0), std_logic_vector'(x"33"), result("For slave read buffer pos(0)"));
         check_equal(m_r_bytes(0), std_logic_vector'(x"D4"), result("For master read buffer pos(0)"));
         check_equal(m_r_bytes(1), std_logic_vector'(x"C3"), result("For master read buffer pos(1)"));
         check_equal(m_r_bytes(2), std_logic_vector'(x"B2"), result("For master read buffer pos(2)"));
         check_equal(m_r_bytes(3), std_logic_vector'(x"A1"), result("For master read buffer pos(3)"));
-        check_equal(w_idx, 1, "Bytes received by slave");
+        check_equal(sl_r_idx, 1, "Bytes received by slave");
         check_equal(m_r_idx, 4, "r_valid pulses");
         info("===== TEST CASE FINISHED =====");
+
+      ----------------------------------------------------------------------
+      -- TEST CASE DESCRIPTION:
+      -- This test is specifically for the WM8731 Audio Codec chip and simulates
+      -- the chips configuration
+      -- Expected Result:
+      -- All bytes sent are being received and acknowledged
+      ----------------------------------------------------------------------
       ELSIF run("WM8731_test") THEN
         configure_WM8731;
         wait_for_master;
-        check_equal(w_bytes(0), std_logic_vector'("00011110"), result("For slave read buf(0)"));
-        check_equal(w_bytes(1), std_logic_vector'("00000000"), result("For slave read buf(1)"));
-        check_equal(w_bytes(2), std_logic_vector'("00001000"), result("For slave read buf(2)"));
-        check_equal(w_bytes(3), std_logic_vector'("00010000"), result("For slave read buf(3)"));
-        check_equal(w_bytes(4), std_logic_vector'("00001010"), result("For slave read buf(4)"));
-        check_equal(w_bytes(5), std_logic_vector'("00000000"), result("For slave read buf(5)"));
-        check_equal(w_bytes(6), std_logic_vector'("00001100"), result("For slave read buf(6)"));
-        check_equal(w_bytes(7), std_logic_vector'("01100111"), result("For slave read buf(7)"));
-        check_equal(w_bytes(8), std_logic_vector'("00001110"), result("For slave read buf(8)"));
-        check_equal(w_bytes(9), std_logic_vector'("00000011"), result("For slave read buf(9)"));
-        check_equal(w_bytes(10), std_logic_vector'("00010000"), result("For slave read buf(10)"));
-        check_equal(w_bytes(11), std_logic_vector'("00000010"), result("For slave read buf(11)"));
-        check_equal(w_bytes(12), std_logic_vector'("00010010"), result("For slave read buf(12)"));
-        check_equal(w_bytes(13), std_logic_vector'("00000000"), result("For slave read buf(13)"));
-        check_equal(w_bytes(14), std_logic_vector'("00010010"), result("For slave read buf(14)"));
-        check_equal(w_bytes(15), std_logic_vector'("00000001"), result("For slave read buf(15)"));
-        check_equal(w_idx, 16, "Bytes received by slave");
+        check_equal(sl_r_bytes(0), std_logic_vector'("00011110"), result("For slave read buf(0)"));
+        check_equal(sl_r_bytes(1), std_logic_vector'("00000000"), result("For slave read buf(1)"));
+        check_equal(sl_r_bytes(2), std_logic_vector'("00001000"), result("For slave read buf(2)"));
+        check_equal(sl_r_bytes(3), std_logic_vector'("00010000"), result("For slave read buf(3)"));
+        check_equal(sl_r_bytes(4), std_logic_vector'("00001010"), result("For slave read buf(4)"));
+        check_equal(sl_r_bytes(5), std_logic_vector'("00000000"), result("For slave read buf(5)"));
+        check_equal(sl_r_bytes(6), std_logic_vector'("00001100"), result("For slave read buf(6)"));
+        check_equal(sl_r_bytes(7), std_logic_vector'("01100111"), result("For slave read buf(7)"));
+        check_equal(sl_r_bytes(8), std_logic_vector'("00001110"), result("For slave read buf(8)"));
+        check_equal(sl_r_bytes(9), std_logic_vector'("00000011"), result("For slave read buf(9)"));
+        check_equal(sl_r_bytes(10), std_logic_vector'("00010000"), result("For slave read buf(10)"));
+        check_equal(sl_r_bytes(11), std_logic_vector'("00000010"), result("For slave read buf(11)"));
+        check_equal(sl_r_bytes(12), std_logic_vector'("00010010"), result("For slave read buf(12)"));
+        check_equal(sl_r_bytes(13), std_logic_vector'("00000000"), result("For slave read buf(13)"));
+        check_equal(sl_r_bytes(14), std_logic_vector'("00010010"), result("For slave read buf(14)"));
+        check_equal(sl_r_bytes(15), std_logic_vector'("00000001"), result("For slave read buf(15)"));
+        check_equal(sl_r_idx, 16, "Bytes received by slave");
         check(nack_flag = '0', "Expected no NACK");
       END IF; -- for test_suite
 
@@ -508,15 +573,19 @@ BEGIN  -- start of architecture --
   --------------------------------------------------------------------------
   -- MONITOR PROCESSES AND CONCURRENT CHECKS.
   --------------------------------------------------------------------------
+
+  -- This Proccess is responsibly for monitoring all activity on the bus
+  -- and checking whether the (generically) passed timing constraints are
+  -- being met as required by the i2c specifications
   i2c_monitor: PROCESS
 
-    VARIABLE start_flag: STD_LOGIC := '0';
-    VARIABLE stop_flag : STD_LOGIC := '0';
-    VARIABLE Sr_flag   : STD_LOGIC := '0';
-    VARIABLE buf_flag  : STD_LOGIC := '0';
-    VARIABLE t_hi_flag : STD_LOGIC := '0';
-    VARIABLE t_lo_flag : STD_LOGIC := '0';
-    VARIABLE dat_flag  : STD_LOGIC := '0';
+    VARIABLE start_flag : STD_LOGIC := '0';
+    VARIABLE stop_flag : STD_LOGIC  := '0';
+    VARIABLE Sr_flag   : STD_LOGIC  := '0';
+    VARIABLE buf_flag  : STD_LOGIC  := '0';
+    VARIABLE t_hi_flag : STD_LOGIC  := '0';
+    VARIABLE t_lo_flag : STD_LOGIC  := '0';
+    VARIABLE dat_flag  : STD_LOGIC  := '0';
 
     -- Timing Constraints
     VARIABLE th_s   : TIME := 0 ns;
@@ -524,24 +593,28 @@ BEGIN  -- start of architecture --
     VARIABLE tsu_p  : TIME := 0 ns;
     VARIABLE tbuf   : TIME := 0 ns;
     VARIABLE t_hi   : TIME := 0 ns;
-    VARIABLE t_lo   : TIME := 0 ns; 
+    VARIABLE t_lo   : TIME := 0 ns;
     VARIABLE tsu_d  : TIME := 0 ns;
+
   BEGIN
     WAIT ON SCL_in, SDA_in;
-    -- check(SDA_in'event /= SCL_in'event, "Expected only one line to change not both.");
+    
+    -- SDA Branch
     IF (SDA_in'event) THEN
+
       -- Check for Start Condition
       IF (SDA_in = '0' AND SCL_in = '1') THEN
         start_flag := '1'; -- start detected
         th_s := now - SDA_in'LAST_EVENT;
 
-        -- check that Setup time for a repeated start has been respected
+        -- check that setup time for a repeated start has been met
         IF (Sr_flag = '1') THEN
           tsu_sr := now - tsu_sr;
           Sr_flag := '0';
           check(tsu_sr >= C_TSU_STA, "Expected start set up time to be atleast: " & to_string(C_TSU_STA, us) & " but instead got " & to_string(tsu_sr, us));
         END IF;
-
+        
+        -- check that bus free time has been met
         IF (buf_flag = '1') THEN
           tbuf := now - tbuf;
           check(tbuf >= C_T_BUF, "Expected bus to be free for atleast: " & to_string(C_T_BUF, us) & " but instead got " & to_string(tbuf, us));
@@ -557,15 +630,17 @@ BEGIN  -- start of architecture --
         tbuf := now - SDA_in'LAST_EVENT;
       END IF;
 
-
-      IF (SCL_in = '0') THEN 
+      -- Check for changing data on SDA during SCL low
+      IF (SCL_in = '0') THEN
         dat_flag := '1';
-        tsu_d := now - SDA_in'last_event; -- take timestamp of sda change
+        tsu_d := now - SDA_in'LAST_EVENT; -- take timestamp of sda change
       END IF;
-
     END IF;
 
+
+    -- SCL Branch
     IF (SCL_in'event) THEN
+
       -- Start condition confirmed
       IF (SDA_in = '0' AND SCL_in = '0' AND start_flag = '1') THEN
         th_s := now - th_s; -- meassure time between SDA falling and SCL falling
@@ -584,62 +659,68 @@ BEGIN  -- start of architecture --
       END IF;
 
 
-     -- This branch tests if SCL's low and high times are correct 
-     -- and the setup and hold time of data on sda
-     IF (SCL_in = '0') THEN
-      IF (t_hi_flag = '1') THEN
-        t_hi := now - t_hi; -- meassure time between SCL rising and falling edge
-        t_hi_flag := '0';
-        check(t_hi >= C_T_HIGH, "Expected SCL high time to be atleast: " & to_string(C_T_HIGH, us) & " but instead got " & to_string(thigh, us));
-      END IF;
-      t_lo_flag := '1';
-      t_lo := now - SCL_in'last_event;  -- take timestamp of scl falling edge
+      -- This branch tests if SCL's low and high times are correct
+      -- and the setup and hold time of data on sda
+      IF (SCL_in = '0') THEN
 
-      -- SCL rising edge
-      ELSIF (SCL_in = '1') THEN
-        IF (t_lo_flag = '1') THEN
-          t_lo := now - t_lo; -- meassure time between SCL falling and rising edge
-          t_lo_flag := '0';
-          check(t_lo >= C_T_LOW, "Expected SCL low time to be atleast: " & to_string(C_T_LOW, us) & " but instead got " & to_string(tlow, us));
+        -- Checks if required high time for scl has been met
+        IF (t_hi_flag = '1') THEN
+          t_hi := now - t_hi;             -- meassure time between SCL rising and falling edge
+          t_hi_flag := '0';
+          check(t_hi >= C_T_HIGH, "Expected SCL high time to be atleast: " & to_string(C_T_HIGH, us) & " but instead got " & to_string(t_hi, us));
         END IF;
+        t_lo_flag := '1';
+        t_lo := now - SCL_in'LAST_EVENT;  -- take timestamp of scl falling edge
+
+      ELSIF (SCL_in = '1') THEN
+        
+        -- Checks if required low time for scl has been met 
+        IF (t_lo_flag = '1') THEN
+          t_lo := now - t_lo;             -- meassure time between SCL falling and rising edge
+          t_lo_flag := '0';
+          check(t_lo >= C_T_LOW, "Expected SCL low time to be atleast: " & to_string(C_T_LOW, us) & " but instead got " & to_string(t_lo, us));
+        END IF;
+
+        -- Checks if required setup time for data on sda has been met
         IF (dat_flag = '1') THEN
-          tsu_d := now - tsu_d; -- meassure time between last SDA change and SCL rising edge
+          tsu_d := now - tsu_d;           -- meassure time between last SDA change and SCL rising edge
           dat_flag := '0';
           check(tsu_d >= C_TSU_DAT, "Expected data setup time to be atleast: " & to_string(C_TSU_DAT, ns) & " but instead got " & to_string(tsu_d, ns));
         END IF;
         t_hi_flag := '1';
-        t_hi := now - SCL_in'last_event; -- take timestamp of scl rising edge
+        t_hi := now - SCL_in'LAST_EVENT;  -- take timestamp of scl rising edge
       END IF;
     END IF;
-
-
-
   END PROCESS;
 
 
   -- concurrently put data on slave
-  sl_w_data <= R_BYTES(r_idx);
+  sl_w_data <= SL_W_BYTES(sl_w_idx);
 
-  sl_read_proc: PROCESS(clk, rst)
+  -- This process controls the extern write register for the slave
+  -- to write data to the master
+  sl_write_proc: PROCESS(clk, rst)
   BEGIN
     IF (rst = '1') THEN
-      r_idx <= 0;
+      sl_w_idx <= 0;
     ELSIF (clk = '1' AND clk'event) THEN
-      IF (sl_req = '1' AND r_idx < R_BYTES'HIGH) THEN
-        r_idx <= r_idx + 1;
+      IF (sl_req = '1' AND sl_w_idx < SL_W_BYTES'HIGH) THEN
+        sl_w_idx <= sl_w_idx + 1;
       END IF;
     END IF;
   END PROCESS;
 
-  sl_write_proc: PROCESS(clk, rst)
+  -- This process controls the external read register for the slave
+  -- to monitor its data reception during transactions
+  sl_read_proc: PROCESS(clk, rst)
   BEGIN
     IF (rst = '1') THEN
-      w_idx <= 0;
-      w_bytes <= (OTHERS => (OTHERS => '0'));
+      sl_r_idx <= 0;
+      sl_r_bytes <= (OTHERS => (OTHERS => '0'));
     ELSIF (clk = '1' AND clk'event) THEN
-      IF (sl_data_val = '1' AND w_idx < w_bytes'LENGTH) THEN
-        w_bytes(w_idx) <= sl_r_data;
-        w_idx <= w_idx + 1;
+      IF (sl_data_val = '1' AND sl_r_idx < sl_r_bytes'LENGTH) THEN
+        sl_r_bytes(sl_r_idx) <= sl_r_data;
+        sl_r_idx <= sl_r_idx + 1;
       END IF;
     END IF;
   END PROCESS;
@@ -673,6 +754,8 @@ BEGIN  -- start of architecture --
     END IF;
   END PROCESS;
 
+  -- This process monitors the slave acknowledge signal
+  -- and sets a flag if a NACK has been received
   ack_monitor: PROCESS(clk, rst)
   BEGIN
     IF (rst = '1') THEN
